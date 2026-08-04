@@ -364,6 +364,110 @@ class RecurrenceTest extends TestCase
         $this->assertNull($reminder->repeat_weekdays);
     }
 
+    public function test_a_user_can_create_a_monthly_nth_weekday_reminder()
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->post(route('reminders.store'), [
+            'title' => 'Team sync',
+            // The third Wednesday of August 2026.
+            'due_date' => '2026-08-19',
+            'due_time' => '10:00',
+            'repeat_unit' => 'month',
+            'repeat_month_mode' => 'nth_weekday',
+            'repeat_week_of_month' => 3,
+            'repeat_weekdays' => [3],
+        ])->assertRedirect(route('reminders.index'));
+
+        $reminder = Reminder::query()->sole();
+
+        $this->assertSame('month', $reminder->repeat_unit);
+        $this->assertSame('nth_weekday', $reminder->repeat_month_mode);
+        $this->assertSame(3, $reminder->repeat_week_of_month);
+        $this->assertSame([3], $reminder->repeat_weekdays);
+        // Unused in this mode — the day comes from repeat_week_of_month
+        // and repeat_weekdays instead.
+        $this->assertNull($reminder->repeat_anchor_day);
+
+        $next = RecurrenceCalculator::for($user)->next($reminder->recurrenceRule(), $reminder->due_at);
+
+        // The third Wednesday of the following month.
+        $this->assertSame('2026-09-16', $next?->setTimezone(self::TIMEZONE)->format('Y-m-d'));
+    }
+
+    public function test_an_nth_weekday_monthly_rule_requires_exactly_one_weekday_and_a_week_of_month()
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->from(route('reminders.index'))
+            ->post(route('reminders.store'), [
+                'title' => 'Team sync',
+                'due_date' => '2026-08-19',
+                'repeat_unit' => 'month',
+                'repeat_month_mode' => 'nth_weekday',
+                // Missing repeat_week_of_month, and two weekdays instead of
+                // the one an nth-weekday rule needs.
+                'repeat_weekdays' => [1, 3],
+            ])
+            ->assertSessionHasErrors(['repeat_week_of_month', 'repeat_weekdays']);
+
+        $this->assertDatabaseCount('reminders', 0);
+    }
+
+    public function test_repeat_week_of_month_must_be_a_valid_ordinal()
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->from(route('reminders.index'))
+            ->post(route('reminders.store'), [
+                'title' => 'Team sync',
+                'due_date' => '2026-08-19',
+                'repeat_unit' => 'month',
+                'repeat_month_mode' => 'nth_weekday',
+                'repeat_week_of_month' => 5,
+                'repeat_weekdays' => [3],
+            ])
+            ->assertSessionHasErrors('repeat_week_of_month');
+
+        $this->assertDatabaseCount('reminders', 0);
+    }
+
+    public function test_the_presenter_puts_an_nth_weekday_monthly_rule_into_words()
+    {
+        $reminder = Reminder::factory()
+            ->dueLocal('2026-08-19 09:00')
+            ->create([
+                'repeat_unit' => 'month',
+                'repeat_interval' => 1,
+                'repeat_month_mode' => 'nth_weekday',
+                'repeat_week_of_month' => 3,
+                'repeat_weekdays' => [3],
+            ]);
+
+        $presented = ReminderPresenter::make()->present($reminder);
+
+        $this->assertSame('Every month on the third Wednesday', $presented['repeat_label']);
+    }
+
+    public function test_the_presenter_puts_an_nth_weekday_yearly_rule_into_words()
+    {
+        $reminder = Reminder::factory()
+            ->dueLocal('2026-11-26 09:00')
+            ->create([
+                'repeat_unit' => 'year',
+                'repeat_interval' => 1,
+                'repeat_month_mode' => 'nth_weekday',
+                'repeat_week_of_month' => 4,
+                'repeat_weekdays' => [4],
+            ]);
+
+        $presented = ReminderPresenter::make()->present($reminder);
+
+        $this->assertSame('Every year on the fourth Thursday of Nov', $presented['repeat_label']);
+    }
+
     public function test_an_empty_repeat_selection_saves_a_one_off_reminder()
     {
         $user = User::factory()->create();

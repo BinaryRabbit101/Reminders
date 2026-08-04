@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ReminderRequest;
 use App\Models\Reminder;
+use App\Support\ListColor;
 use App\Support\ReminderPresenter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -47,6 +48,10 @@ class ReminderController extends Controller
             // Which chip is lit. Null both for "All" and for an id that did
             // not resolve, so a stale link lands on the unfiltered page.
             'active_list_id' => $activeList?->id,
+            // The fixed palette, so the reminder sheet's inline "new list"
+            // dialog can draw the same swatch picker /lists uses, without a
+            // round trip to fetch it.
+            'palette' => ListColor::options(),
         ]);
     }
 

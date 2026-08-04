@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\ListColor;
 use App\Support\ReminderPresenter;
 use App\Support\TodayBoard;
 use Illuminate\Http\Request;
@@ -25,6 +26,7 @@ class TodayController extends Controller
             // The form sheet opens from here too, so it needs the same lists
             // the reminders index gives it.
             'lists' => $presenter->lists($user),
+            'palette' => ListColor::options(),
         ]);
     }
 }

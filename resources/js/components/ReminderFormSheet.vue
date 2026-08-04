@@ -1,11 +1,21 @@
 <script setup lang="ts">
-import { Form, Link } from '@inertiajs/vue3';
+import { Form, router } from '@inertiajs/vue3';
 import { ListPlus, Minus, Plus, Users } from '@lucide/vue';
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import ReminderController from '@/actions/App/Http/Controllers/ReminderController';
+import ReminderListController from '@/actions/App/Http/Controllers/ReminderListController';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -15,21 +25,26 @@ import {
     SheetHeader,
     SheetTitle,
 } from '@/components/ui/sheet';
-import { index as listsIndex } from '@/routes/lists';
 import type {
+    ListColorOption,
+    ListColorToken,
     Reminder,
     ReminderFormDefaults,
     ReminderList,
+    RepeatMonthMode,
     RepeatUnit,
+    WeekOfMonth,
 } from '@/types';
 
-const { open, reminder, defaults, lists, timezone } = defineProps<{
+const { open, reminder, defaults, lists, palette, timezone } = defineProps<{
     open: boolean;
     /** The reminder being edited, or null when creating a new one. */
     reminder: Reminder | null;
     defaults: ReminderFormDefaults;
     /** The viewer's own lists — there is no such thing as anyone else's. */
     lists: ReminderList[];
+    /** The fixed palette, for the inline "new list" dialog's swatch picker. */
+    palette: ListColorOption[];
     timezone: string;
 }>();
 
@@ -55,26 +70,26 @@ const initial = computed(() => ({
     is_shared: reminder?.is_shared ?? defaults.is_shared,
 }));
 
-/**
- * What the repeat picker offers. The four presets are just their unit at an
- * interval of 1; "custom" is the same thing with the interval unlocked.
- */
-type RepeatMode = 'none' | RepeatUnit | 'custom';
-
-const REPEAT_OPTIONS: { value: RepeatMode; label: string }[] = [
+/** The repeat unit select — "does not repeat" is just another option in it. */
+const REPEAT_UNIT_OPTIONS: { value: 'none' | RepeatUnit; label: string }[] = [
     { value: 'none', label: 'Does not repeat' },
-    { value: 'day', label: 'Daily' },
-    { value: 'week', label: 'Weekly' },
-    { value: 'month', label: 'Monthly' },
-    { value: 'year', label: 'Yearly' },
-    { value: 'custom', label: 'Custom…' },
+    { value: 'day', label: 'Days' },
+    { value: 'week', label: 'Weeks' },
+    { value: 'month', label: 'Months' },
+    { value: 'year', label: 'Years' },
 ];
 
-const UNIT_OPTIONS: { value: RepeatUnit; label: string }[] = [
-    { value: 'day', label: 'days' },
-    { value: 'week', label: 'weeks' },
-    { value: 'month', label: 'months' },
-    { value: 'year', label: 'years' },
+const MONTH_MODE_OPTIONS: { value: RepeatMonthMode; label: string }[] = [
+    { value: 'day_of_month', label: 'On the same date' },
+    { value: 'nth_weekday', label: 'On a weekday' },
+];
+
+const WEEK_OF_MONTH_OPTIONS: { value: WeekOfMonth; label: string }[] = [
+    { value: 1, label: 'First' },
+    { value: 2, label: 'Second' },
+    { value: 3, label: 'Third' },
+    { value: 4, label: 'Fourth' },
+    { value: -1, label: 'Last' },
 ];
 
 /** ISO weekday numbers, Monday first — the order the server sorts them in. */
@@ -95,14 +110,17 @@ const MAX_INTERVAL = 999;
 const selectClass =
     'h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30';
 
-const repeatMode = ref<RepeatMode>('none');
-const repeatUnit = ref<RepeatUnit>('day');
+const repeatUnit = ref<'none' | RepeatUnit>('none');
 const repeatInterval = ref(1);
 const weekdays = ref<number[]>([]);
 const repeatUntil = ref('');
 const dueDate = ref('');
 /** The select's value — a string, because that is what an `<option>` holds. */
 const listId = ref('');
+const monthMode = ref<RepeatMonthMode>('day_of_month');
+const weekOfMonth = ref<WeekOfMonth>(1);
+/** The single weekday an nth-weekday rule falls on. */
+const nthWeekday = ref(1);
 
 /**
  * Whether filing is on offer at all.
@@ -114,22 +132,24 @@ const listId = ref('');
  */
 const canChooseList = computed(() => reminder === null || reminder.is_mine);
 
-/**
- * The unit actually being submitted, or null for a one-off. A preset is its
- * own unit; "custom" defers to the unit select underneath it.
- */
-const effectiveUnit = computed<RepeatUnit | null>(() => {
-    if (repeatMode.value === 'none') {
-        return null;
+const isRepeating = computed(() => repeatUnit.value !== 'none');
+const isMonthly = computed(
+    () => repeatUnit.value === 'month' || repeatUnit.value === 'year',
+);
+const isNthWeekday = computed(
+    () => isMonthly.value && monthMode.value === 'nth_weekday',
+);
+
+/** "week" / "weeks" — how the interval row's unit reads next to the stepper. */
+const repeatUnitLabel = computed(() => {
+    if (repeatUnit.value === 'none') {
+        return '';
     }
 
-    return repeatMode.value === 'custom' ? repeatUnit.value : repeatMode.value;
+    return repeatInterval.value === 1
+        ? repeatUnit.value
+        : `${repeatUnit.value}s`;
 });
-
-// Presets are always "every 1"; only custom exposes the stepper.
-const effectiveInterval = computed(() =>
-    repeatMode.value === 'custom' ? repeatInterval.value : 1,
-);
 
 /**
  * Reset the local controls whenever the sheet opens or switches reminder.
@@ -138,32 +158,70 @@ const effectiveInterval = computed(() =>
  * this, opening a second reminder would inherit the first one's rule.
  */
 function syncFromProps(): void {
-    const unit = reminder?.repeat_unit ?? defaults.repeat_unit;
-    const interval = reminder?.repeat_interval ?? defaults.repeat_interval;
+    // Guards the reseed watch below: assigning repeatUnit/monthMode here
+    // would otherwise trip it too, overwriting the saved ordinal/weekday
+    // with defaults guessed from the date field.
+    isSyncingFromProps = true;
 
-    // An interval of 1 is exactly what a preset means; anything else has to
-    // reopen as custom or the sheet would silently reset it to 1 on save.
-    repeatMode.value =
-        unit === null ? 'none' : interval === 1 ? unit : 'custom';
-    repeatUnit.value = unit ?? 'day';
-    repeatInterval.value = interval;
+    const unit = reminder?.repeat_unit ?? defaults.repeat_unit;
+
+    repeatUnit.value = unit ?? 'none';
+    repeatInterval.value =
+        reminder?.repeat_interval ?? defaults.repeat_interval;
     weekdays.value = [
         ...(reminder?.repeat_weekdays ?? defaults.repeat_weekdays),
     ];
     repeatUntil.value = reminder?.repeat_until ?? defaults.repeat_until ?? '';
     dueDate.value = reminder?.due_date ?? defaults.due_date;
+    monthMode.value =
+        reminder?.repeat_month_mode ??
+        defaults.repeat_month_mode ??
+        'day_of_month';
+    weekOfMonth.value =
+        reminder?.repeat_week_of_month ??
+        defaults.repeat_week_of_month ??
+        weekOfMonthOf(dueDate.value);
+    nthWeekday.value =
+        monthMode.value === 'nth_weekday' && weekdays.value.length === 1
+            ? weekdays.value[0]
+            : isoWeekdayOf(dueDate.value);
 
     const list = reminder?.list_id ?? defaults.list_id;
     listId.value = list === null ? '' : String(list);
+
+    // Watchers below flush after this function returns — release the guard
+    // only once they have, so they see it still held.
+    nextTick(() => {
+        isSyncingFromProps = false;
+    });
 }
+
+/** True while syncFromProps() is assigning refs the reseed watch also watches. */
+let isSyncingFromProps = false;
 
 watch([() => reminder, () => open], syncFromProps, { immediate: true });
 
 // A weekly rule needs at least one day, so seed it from the date already in
 // the form rather than making the user notice a validation error.
-watch(effectiveUnit, (unit) => {
+watch(repeatUnit, (unit) => {
     if (unit === 'week' && weekdays.value.length === 0) {
         weekdays.value = [isoWeekdayOf(dueDate.value)];
+    }
+});
+
+// Reseed the nth-weekday picker's defaults when the user switches into it by
+// hand, so it opens on whatever the date field already implies ("the 1st" is
+// also "the first Thursday", whichever month that happens to be). Guarded
+// against syncFromProps(), which sets these same refs from a saved rule and
+// must not have its values immediately overwritten by a guess.
+watch([repeatUnit, monthMode], ([unit, mode]) => {
+    if (isSyncingFromProps) {
+        return;
+    }
+
+    if ((unit === 'month' || unit === 'year') && mode === 'nth_weekday') {
+        weekOfMonth.value = weekOfMonthOf(dueDate.value);
+        nthWeekday.value = isoWeekdayOf(dueDate.value);
     }
 });
 
@@ -187,6 +245,107 @@ function isoWeekdayOf(date: string): number {
     const weekday = new Date(year, month - 1, day).getDay();
 
     return weekday === 0 ? 7 : weekday;
+}
+
+/**
+ * Which occurrence of its own weekday a `YYYY-MM-DD` date is within its
+ * month — mirrors `RecurrenceCalculator::nthWeekdayOfMonth()` on the server,
+ * so the picker's default ordinal ("third", "last") matches what the
+ * backend would derive from the same date.
+ */
+function weekOfMonthOf(date: string): WeekOfMonth {
+    const [year, month, day] = date.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    if (day + 7 > daysInMonth) {
+        return -1;
+    }
+
+    return Math.min(Math.floor((day - 1) / 7) + 1, 4) as WeekOfMonth;
+}
+
+/** "the 15th" — the due date's day, as the day-of-month repeat mode reads. */
+function dayOfMonthLabel(date: string): string {
+    if (date === '') {
+        return '';
+    }
+
+    const day = Number(date.split('-')[2]);
+    const suffix = [11, 12, 13].includes(day % 100)
+        ? 'th'
+        : (['th', 'st', 'nd', 'rd'][day % 10] ?? 'th');
+
+    return `the ${day}${suffix}`;
+}
+
+/** "Aug 4, 2026" — how the start-date caption speaks the due date. */
+function formattedDate(date: string): string {
+    if (date === '') {
+        return '';
+    }
+
+    const [year, month, day] = date.split('-').map(Number);
+
+    return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+    });
+}
+
+// --- Inline "new list" dialog -------------------------------------------
+//
+// Posted with router.post + preserveState rather than an Inertia <Link> or
+// nested <Form>, so creating a list never navigates away and never discards
+// whatever is already typed into this sheet. Because ReminderListController
+// redirects back to wherever the request came from, and preserveState keeps
+// this page's component instance (and this sheet's local refs) alive across
+// that round trip, the sheet simply reopens on an updated `lists` prop.
+
+const listDialogOpen = ref(false);
+const newListName = ref('');
+const newListColor = ref<ListColorToken>(palette[0]?.value ?? 'slate');
+const newListSubmitting = ref(false);
+const newListErrors = ref<{ name?: string; color?: string }>({});
+/** The name just submitted — how the freshly created list is picked back out
+ *  of the refreshed `lists` prop, since the server only returns a redirect. */
+let pendingListName = '';
+
+function openListDialog(): void {
+    newListName.value = '';
+    newListColor.value = palette[0]?.value ?? 'slate';
+    newListErrors.value = {};
+    listDialogOpen.value = true;
+}
+
+function submitListDialog(): void {
+    newListSubmitting.value = true;
+    pendingListName = newListName.value;
+
+    router.post(
+        ReminderListController.store.url(),
+        { name: newListName.value, color: newListColor.value },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                const created = lists.find(
+                    (list) => list.name === pendingListName,
+                );
+
+                if (created) {
+                    listId.value = String(created.id);
+                }
+
+                listDialogOpen.value = false;
+                newListSubmitting.value = false;
+            },
+            onError: (errors) => {
+                newListErrors.value = errors;
+                newListSubmitting.value = false;
+            },
+        },
+    );
 }
 </script>
 
@@ -232,7 +391,8 @@ function isoWeekdayOf(date: string): number {
                             <!--
                                 Bound rather than uncontrolled: a weekly
                                 rule seeds its first weekday from whatever
-                                date is currently in this field.
+                                date is currently in this field, and it is
+                                also the recurrence's anchor/start date.
                             -->
                             <Input
                                 id="due_date"
@@ -270,14 +430,25 @@ function isoWeekdayOf(date: string): number {
                     </div>
 
                     <!--
-                        Filing is optional and personal. With no lists yet
-                        there is nothing to choose between, so the select is
-                        replaced by the way to make one rather than shown
-                        empty.
+                        Filing is optional and personal. Creating a list
+                        never leaves this sheet — see the Dialog below.
                     -->
                     <template v-if="canChooseList">
                         <div v-if="lists.length > 0" class="grid gap-2">
-                            <Label for="list_id">List</Label>
+                            <div
+                                class="flex items-center justify-between gap-2"
+                            >
+                                <Label for="list_id">List</Label>
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                                    data-test="new-list-trigger"
+                                    @click="openListDialog()"
+                                >
+                                    <ListPlus class="size-3.5" />
+                                    New list
+                                </button>
+                            </div>
                             <select
                                 id="list_id"
                                 v-model="listId"
@@ -297,27 +468,28 @@ function isoWeekdayOf(date: string): number {
                             <InputError :message="errors.list_id" />
                         </div>
 
-                        <Link
+                        <button
                             v-else
-                            :href="listsIndex()"
+                            type="button"
                             class="flex items-center gap-2 rounded-lg border border-dashed p-3 text-sm text-muted-foreground transition-colors hover:bg-accent"
-                            data-test="create-first-list-link"
+                            data-test="create-first-list-button"
+                            @click="openListDialog()"
                         >
                             <ListPlus class="size-4 shrink-0" />
                             Create a list to group your reminders
-                        </Link>
+                        </button>
                     </template>
 
                     <div class="grid gap-2">
-                        <Label for="repeat_mode">Repeat</Label>
+                        <Label for="repeat_unit_select">Repeat</Label>
                         <select
-                            id="repeat_mode"
-                            v-model="repeatMode"
+                            id="repeat_unit_select"
+                            v-model="repeatUnit"
                             :class="selectClass"
                             data-test="repeat-select"
                         >
                             <option
-                                v-for="option in REPEAT_OPTIONS"
+                                v-for="option in REPEAT_UNIT_OPTIONS"
                                 :key="option.value"
                                 :value="option.value"
                             >
@@ -331,25 +503,19 @@ function isoWeekdayOf(date: string): number {
                             are shaped for ReminderRequest. Nothing is sent
                             at all for a one-off.
                         -->
-                        <template v-if="effectiveUnit !== null">
-                            <input
-                                type="hidden"
-                                name="repeat_unit"
-                                :value="effectiveUnit"
-                            />
-                            <input
-                                type="hidden"
-                                name="repeat_interval"
-                                :value="effectiveInterval"
-                            />
-                        </template>
+                        <input
+                            v-if="isRepeating"
+                            type="hidden"
+                            name="repeat_unit"
+                            :value="repeatUnit"
+                        />
 
                         <InputError :message="errors.repeat_unit" />
                     </div>
 
-                    <!-- Custom: pick the unit and how many of them. -->
+                    <!-- Every N of the chosen unit — always editable, no separate "custom" mode to find. -->
                     <div
-                        v-if="repeatMode === 'custom'"
+                        v-if="isRepeating"
                         class="grid grid-cols-[auto_1fr] items-end gap-3"
                     >
                         <div class="grid gap-2">
@@ -369,6 +535,7 @@ function isoWeekdayOf(date: string): number {
                                 <Input
                                     id="repeat_interval_input"
                                     v-model.number="repeatInterval"
+                                    name="repeat_interval"
                                     type="number"
                                     inputmode="numeric"
                                     min="1"
@@ -390,25 +557,9 @@ function isoWeekdayOf(date: string): number {
                             </div>
                         </div>
 
-                        <div class="grid gap-2">
-                            <Label for="repeat_unit_choice" class="sr-only">
-                                Unit
-                            </Label>
-                            <select
-                                id="repeat_unit_choice"
-                                v-model="repeatUnit"
-                                :class="selectClass"
-                                data-test="repeat-unit-select"
-                            >
-                                <option
-                                    v-for="option in UNIT_OPTIONS"
-                                    :key="option.value"
-                                    :value="option.value"
-                                >
-                                    {{ option.label }}
-                                </option>
-                            </select>
-                        </div>
+                        <p class="pb-2 text-sm text-muted-foreground">
+                            {{ repeatUnitLabel }}
+                        </p>
 
                         <InputError
                             class="col-span-2"
@@ -416,8 +567,17 @@ function isoWeekdayOf(date: string): number {
                         />
                     </div>
 
+                    <!-- Makes the Date field's double duty as the series' start explicit. -->
+                    <p
+                        v-if="isRepeating"
+                        class="-mt-2 text-sm text-muted-foreground"
+                    >
+                        Starts {{ formattedDate(dueDate) }} and repeats from
+                        there.
+                    </p>
+
                     <!-- Weekly: which days of the week it runs on. -->
-                    <div v-if="effectiveUnit === 'week'" class="grid gap-2">
+                    <div v-if="repeatUnit === 'week'" class="grid gap-2">
                         <Label>On these days</Label>
                         <div class="flex gap-1" data-test="repeat-weekdays">
                             <label
@@ -443,8 +603,95 @@ function isoWeekdayOf(date: string): number {
                         <InputError :message="errors.repeat_weekdays" />
                     </div>
 
+                    <!-- Monthly/yearly: the plain date, or a weekday like "the third Wednesday". -->
+                    <div v-if="isMonthly" class="grid gap-2">
+                        <Label>On</Label>
+                        <div class="flex gap-3" data-test="repeat-month-mode">
+                            <label
+                                v-for="option in MONTH_MODE_OPTIONS"
+                                :key="option.value"
+                                class="flex items-center gap-1.5 text-sm"
+                            >
+                                <input
+                                    v-model="monthMode"
+                                    type="radio"
+                                    name="repeat_month_mode"
+                                    :value="option.value"
+                                />
+                                {{ option.label }}
+                            </label>
+                        </div>
+
+                        <!--
+                            Day-of-month mode is not independently editable —
+                            it mirrors the server, which always derives
+                            `repeat_anchor_day` from the Date field above
+                            rather than accepting one from the client.
+                        -->
+                        <p
+                            v-if="!isNthWeekday"
+                            class="text-sm text-muted-foreground"
+                            data-test="repeat-day-of-month"
+                        >
+                            On {{ dayOfMonthLabel(dueDate) }} of the
+                            {{ repeatUnit === 'year' ? 'year' : 'month' }}.
+                        </p>
+
+                        <div
+                            v-else
+                            class="grid grid-cols-2 gap-3"
+                            data-test="repeat-nth-weekday"
+                        >
+                            <select
+                                v-model.number="weekOfMonth"
+                                :class="selectClass"
+                                aria-label="Week of the month"
+                                data-test="repeat-week-of-month-select"
+                            >
+                                <option
+                                    v-for="option in WEEK_OF_MONTH_OPTIONS"
+                                    :key="option.value"
+                                    :value="option.value"
+                                >
+                                    {{ option.label }}
+                                </option>
+                            </select>
+                            <select
+                                v-model.number="nthWeekday"
+                                :class="selectClass"
+                                aria-label="Weekday"
+                                data-test="repeat-nth-weekday-select"
+                            >
+                                <option
+                                    v-for="day in WEEKDAYS"
+                                    :key="day.value"
+                                    :value="day.value"
+                                >
+                                    {{ day.label }}
+                                </option>
+                            </select>
+
+                            <input
+                                type="hidden"
+                                name="repeat_week_of_month"
+                                :value="weekOfMonth"
+                            />
+                            <input
+                                type="hidden"
+                                name="repeat_weekdays[]"
+                                :value="nthWeekday"
+                            />
+                        </div>
+
+                        <InputError :message="errors.repeat_week_of_month" />
+                        <InputError
+                            v-if="isNthWeekday"
+                            :message="errors.repeat_weekdays"
+                        />
+                    </div>
+
                     <!-- Optional end date, on the local calendar. -->
-                    <div v-if="effectiveUnit !== null" class="grid gap-2">
+                    <div v-if="isRepeating" class="grid gap-2">
                         <Label for="repeat_until">Ends</Label>
                         <Input
                             id="repeat_until"
@@ -516,4 +763,78 @@ function isoWeekdayOf(date: string): number {
             </Form>
         </SheetContent>
     </Sheet>
+
+    <!--
+        Creating a list from here never navigates: see submitListDialog().
+        Layers correctly over the Sheet above it because both overlays are
+        z-50 portals to <body> and this one mounts after it.
+    -->
+    <Dialog v-model:open="listDialogOpen">
+        <DialogContent>
+            <DialogHeader class="space-y-3">
+                <DialogTitle>New list</DialogTitle>
+                <DialogDescription>
+                    Deleting a list later keeps its reminders.
+                </DialogDescription>
+            </DialogHeader>
+
+            <form class="grid gap-4" @submit.prevent="submitListDialog()">
+                <div class="grid gap-2">
+                    <Label for="new_list_name">Name</Label>
+                    <Input
+                        id="new_list_name"
+                        v-model="newListName"
+                        required
+                        autocomplete="off"
+                        maxlength="50"
+                        placeholder="e.g. Errands"
+                        data-test="new-list-name-input"
+                    />
+                    <InputError :message="newListErrors.name" />
+                </div>
+
+                <div class="grid gap-2">
+                    <Label>Colour</Label>
+                    <div
+                        class="flex flex-wrap gap-2"
+                        data-test="new-list-color-picker"
+                    >
+                        <label
+                            v-for="option in palette"
+                            :key="option.value"
+                            class="cursor-pointer"
+                        >
+                            <input
+                                v-model="newListColor"
+                                type="radio"
+                                :value="option.value"
+                                :aria-label="option.label"
+                                class="peer sr-only"
+                            />
+                            <span
+                                class="block size-8 rounded-full border-2 border-transparent ring-offset-2 ring-offset-background transition-all peer-checked:ring-2 peer-checked:ring-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-ring"
+                                :style="{ backgroundColor: option.hex }"
+                            />
+                        </label>
+                    </div>
+                    <InputError :message="newListErrors.color" />
+                </div>
+
+                <DialogFooter class="gap-2">
+                    <DialogClose as-child>
+                        <Button type="button" variant="secondary">
+                            Cancel
+                        </Button>
+                    </DialogClose>
+                    <Button
+                        type="submit"
+                        :disabled="newListSubmitting"
+                        data-test="save-new-list-button"
+                    >
+                        Add list
+                    </Button>
+                </DialogFooter>
+            </form>
+        </DialogContent>
+    </Dialog>
 </template>

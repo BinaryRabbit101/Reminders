@@ -21,17 +21,20 @@ import { Button } from '@/components/ui/button';
 import { today } from '@/routes';
 import { index as reminders } from '@/routes/reminders';
 import type {
+    ListColorOption,
     Reminder,
     ReminderFormDefaults,
     ReminderList,
     TodayBoard,
 } from '@/types';
 
-const { board, defaults, lists, timezone } = defineProps<{
+const { board, defaults, lists, palette, timezone } = defineProps<{
     board: TodayBoard;
     defaults: ReminderFormDefaults;
     /** The viewer's own lists, for the form sheet's select. */
     lists: ReminderList[];
+    /** The fixed palette, for the sheet's inline "new list" dialog. */
+    palette: ListColorOption[];
     timezone: string;
 }>();
 
@@ -329,6 +332,7 @@ function openEdit(reminder: Reminder): void {
         :reminder="editing"
         :defaults="defaults"
         :lists="lists"
+        :palette="palette"
         :timezone="timezone"
     />
 </template>

@@ -6,16 +6,19 @@ import ReminderFormSheet from '@/components/ReminderFormSheet.vue';
 import { history as historyRoute } from '@/routes';
 import type {
     HistoryEntry,
+    ListColorOption,
     NotificationHistory,
     Reminder,
     ReminderFormDefaults,
     ReminderListSummary,
 } from '@/types';
 
-const { history, defaults, lists, timezone } = defineProps<{
+const { history, defaults, lists, palette, timezone } = defineProps<{
     history: NotificationHistory;
     defaults: ReminderFormDefaults;
     lists: ReminderListSummary[];
+    /** The fixed palette, for the sheet's inline "new list" dialog. */
+    palette: ListColorOption[];
     timezone: string;
 }>();
 
@@ -168,6 +171,7 @@ function openEdit(entry: HistoryEntry): void {
         :reminder="editing"
         :defaults="defaults"
         :lists="lists"
+        :palette="palette"
         :timezone="timezone"
     />
 </template>

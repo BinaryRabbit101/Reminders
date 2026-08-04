@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\ListColor;
 use App\Support\NotificationHistory;
 use App\Support\ReminderPresenter;
 use Illuminate\Http\Request;
@@ -31,6 +32,9 @@ class HistoryController extends Controller
             'timezone' => $user->timezone(),
             'defaults' => $presenter->formDefaults($user),
             'lists' => $presenter->lists($user),
+            // The sheet's inline "new list" dialog needs the same palette
+            // /lists and /reminders give it.
+            'palette' => ListColor::options(),
         ]);
     }
 }

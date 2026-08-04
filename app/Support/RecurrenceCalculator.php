@@ -142,17 +142,50 @@ final class RecurrenceCalculator
      * Monthly and yearly rules, counted in whole months from the first of the
      * month so month arithmetic can never overflow into the next one.
      *
-     * The day comes from the rule's anchor rather than from the occurrence:
-     * "monthly on the 31st" is stored as the 28th while it sits in February,
-     * and stepping on from *that* would strand the series on the 28th for
-     * good. Clamping is applied fresh each month against the anchor.
+     * Two ways a rule can pick its day within that month:
+     *
+     * - Day-of-month (the default): the day comes from the rule's anchor
+     *   rather than from the occurrence, because "monthly on the 31st" is
+     *   stored as the 28th while it sits in February, and stepping on from
+     *   *that* would strand the series on the 28th for good. Clamping is
+     *   applied fresh each month against the anchor.
+     * - Nth weekday: "the 3rd Wednesday" — see {@see nthWeekdayOfMonth()}.
      */
     private function nextMonthly(CarbonImmutable $local, RecurrenceRule $rule, int $months): CarbonImmutable
     {
-        $anchorDay = $rule->anchorDay ?? $local->day;
         $month = $local->startOfMonth()->addMonths($months);
 
+        if ($rule->isNthWeekday()) {
+            return $this->nthWeekdayOfMonth($month, $rule->weekdays[0], $rule->weekOfMonth)
+                ->setTimeFrom($local);
+        }
+
+        $anchorDay = $rule->anchorDay ?? $local->day;
+
         return $month->setDay(min($anchorDay, $month->daysInMonth))->setTimeFrom($local);
+    }
+
+    /**
+     * The date of the Nth occurrence of a weekday within a month — "the 3rd
+     * Wednesday of March", or, with `$ordinal` -1, "the last Friday".
+     *
+     * Every month has at least four of any given weekday, so ordinals 1-4
+     * never need the clamping the day-of-month path does; "last" is found by
+     * counting back from the month's final day instead of forward from its
+     * first, so it lands on whichever week that turns out to be.
+     */
+    private function nthWeekdayOfMonth(CarbonImmutable $monthStart, int $isoWeekday, int $ordinal): CarbonImmutable
+    {
+        if ($ordinal === -1) {
+            $end = $monthStart->endOfMonth();
+
+            return $end->subDays(($end->dayOfWeekIso - $isoWeekday + 7) % 7);
+        }
+
+        $first = $monthStart->startOfMonth();
+        $firstOccurrence = $first->addDays(($isoWeekday - $first->dayOfWeekIso + 7) % 7);
+
+        return $firstOccurrence->addWeeks($ordinal - 1);
     }
 
     /**

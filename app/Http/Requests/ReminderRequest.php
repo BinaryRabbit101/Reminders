@@ -23,7 +23,7 @@ class ReminderRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
-        foreach (['list_id', 'repeat_unit', 'repeat_interval', 'repeat_until'] as $key) {
+        foreach (['list_id', 'repeat_unit', 'repeat_interval', 'repeat_until', 'repeat_month_mode'] as $key) {
             if ($this->has($key) && trim((string) $this->input($key)) === '') {
                 $this->merge([$key => null]);
             }
@@ -56,8 +56,32 @@ class ReminderRequest extends FormRequest
             ],
             'repeat_unit' => ['nullable', Rule::in(RecurrenceRule::UNITS)],
             'repeat_interval' => ['nullable', 'integer', 'min:1', 'max:'.RecurrenceRule::MAX_INTERVAL],
-            // A weekly rule with no days chosen has nothing to repeat on.
-            'repeat_weekdays' => ['nullable', 'array', 'required_if:repeat_unit,week'],
+            // How a monthly/yearly rule picks its day — the plain
+            // day-of-month default, or "the 3rd Wednesday" style rule.
+            'repeat_month_mode' => ['nullable', Rule::in(['day_of_month', 'nth_weekday'])],
+            'repeat_week_of_month' => [
+                'nullable',
+                'integer',
+                Rule::in(RecurrenceRule::WEEKS_OF_MONTH),
+                'required_if:repeat_month_mode,nth_weekday',
+            ],
+            // A weekly rule with no days chosen has nothing to repeat on;
+            // an nth-weekday monthly/yearly rule needs exactly the one day
+            // it falls on.
+            'repeat_weekdays' => [
+                'nullable',
+                'array',
+                'required_if:repeat_unit,week',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($this->input('repeat_month_mode') !== 'nth_weekday') {
+                        return;
+                    }
+
+                    if (! is_array($value) || count($value) !== 1) {
+                        $fail('Pick the one weekday this repeats on.');
+                    }
+                },
+            ],
             'repeat_weekdays.*' => ['integer', 'between:1,7'],
             'repeat_until' => ['nullable', 'date_format:Y-m-d', 'after:due_date'],
         ];
@@ -77,6 +101,8 @@ class ReminderRequest extends FormRequest
             'list_id' => 'list',
             'repeat_unit' => 'repeat',
             'repeat_interval' => 'repeat interval',
+            'repeat_month_mode' => 'repeat day mode',
+            'repeat_week_of_month' => 'week of the month',
             'repeat_weekdays' => 'repeat days',
             'repeat_until' => 'repeat end date',
         ];
@@ -112,6 +138,8 @@ class ReminderRequest extends FormRequest
      *     repeat_weekdays: list<int>|null,
      *     repeat_until: string|null,
      *     repeat_anchor_day: int|null,
+     *     repeat_month_mode: string|null,
+     *     repeat_week_of_month: int|null,
      * }
      */
     public function reminderAttributes(): array
@@ -176,7 +204,10 @@ class ReminderRequest extends FormRequest
      * taken from the *local* due date. It exists because `due_at` forgets:
      * "monthly on the 31st" is stored as the 28th while it sits in February,
      * and a series that advanced from the clamped value could never climb
-     * back to the 31st.
+     * back to the 31st. It is only used in 'day_of_month' mode — an
+     * 'nth_weekday' rule ("the 3rd Wednesday") carries its day in
+     * `repeat_week_of_month` and `repeat_weekdays` instead, both of which the
+     * user chose directly rather than the server deriving them.
      *
      * @param  Carbon  $local  The due moment as local wall-time.
      * @return array{
@@ -185,6 +216,8 @@ class ReminderRequest extends FormRequest
      *     repeat_weekdays: list<int>|null,
      *     repeat_until: string|null,
      *     repeat_anchor_day: int|null,
+     *     repeat_month_mode: string|null,
+     *     repeat_week_of_month: int|null,
      * }
      */
     private function recurrenceAttributes(Carbon $local): array
@@ -199,11 +232,20 @@ class ReminderRequest extends FormRequest
                 'repeat_weekdays' => null,
                 'repeat_until' => null,
                 'repeat_anchor_day' => null,
+                'repeat_month_mode' => null,
+                'repeat_week_of_month' => null,
             ];
         }
 
+        $isMonthly = in_array($unit, ['month', 'year'], true);
+        /** @var string|null $monthMode */
+        $monthMode = $isMonthly ? $this->validated('repeat_month_mode') : null;
+        $isNthWeekday = $monthMode === 'nth_weekday';
+
         /** @var array<int, int|string> $weekdays */
-        $weekdays = $unit === 'week' ? (array) $this->validated('repeat_weekdays', []) : [];
+        $weekdays = $unit === 'week' || $isNthWeekday
+            ? (array) $this->validated('repeat_weekdays', [])
+            : [];
         $weekdays = array_values(array_unique(array_map(intval(...), $weekdays)));
         sort($weekdays);
 
@@ -212,7 +254,9 @@ class ReminderRequest extends FormRequest
             'repeat_interval' => max(1, (int) $this->validated('repeat_interval', 1)),
             'repeat_weekdays' => $weekdays === [] ? null : $weekdays,
             'repeat_until' => $this->validated('repeat_until'),
-            'repeat_anchor_day' => in_array($unit, ['month', 'year'], true) ? $local->day : null,
+            'repeat_anchor_day' => $isMonthly && ! $isNthWeekday ? $local->day : null,
+            'repeat_month_mode' => $monthMode,
+            'repeat_week_of_month' => $isNthWeekday ? (int) $this->validated('repeat_week_of_month') : null,
         ];
     }
 }

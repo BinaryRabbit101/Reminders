@@ -2,6 +2,17 @@
 export type RepeatUnit = 'day' | 'week' | 'month' | 'year';
 
 /**
+ * How a monthly/yearly rule picks its day. `null` (or 'day_of_month') is the
+ * plain default — the day-of-month the due date fell on. 'nth_weekday' is
+ * the "3rd Wednesday" style rule, read together with `repeat_week_of_month`
+ * and the single weekday in `repeat_weekdays`.
+ */
+export type RepeatMonthMode = 'day_of_month' | 'nth_weekday';
+
+/** Which occurrence of the weekday an nth-weekday rule falls on. */
+export type WeekOfMonth = 1 | 2 | 3 | 4 | -1;
+
+/**
  * The snooze lengths the server accepts. `tomorrow` is the configured default
  * time on the next local day — the server works out when that is.
  */
@@ -101,10 +112,18 @@ export type Reminder = {
     /** The raw rule, so the edit sheet can reopen on exactly what was saved. */
     repeat_unit: RepeatUnit | null;
     repeat_interval: number;
-    /** ISO weekday numbers (1 = Monday), in week order. */
+    /**
+     * ISO weekday numbers (1 = Monday), in week order. For a weekly rule,
+     * every chosen day; for an nth-weekday monthly/yearly rule, the single
+     * weekday it falls on.
+     */
     repeat_weekdays: number[];
     /** Inclusive local end date, `YYYY-MM-DD`. */
     repeat_until: string | null;
+    /** How a monthly/yearly rule picks its day; null for day/week rules. */
+    repeat_month_mode: RepeatMonthMode | null;
+    /** Set only alongside `repeat_month_mode === 'nth_weekday'`. */
+    repeat_week_of_month: WeekOfMonth | null;
 };
 
 /** One local day of upcoming reminders, with its heading already formatted. */
@@ -142,6 +161,8 @@ export type ReminderFormDefaults = {
     repeat_interval: number;
     repeat_weekdays: number[];
     repeat_until: string | null;
+    repeat_month_mode: RepeatMonthMode | null;
+    repeat_week_of_month: WeekOfMonth | null;
 };
 
 /** One entry of the curated timezone select, labelled server-side. */

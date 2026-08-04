@@ -198,6 +198,55 @@ class RecurrenceCalculatorTest extends TestCase
         $this->assertSame('2028-08-03 09:00', $this->localString($next));
     }
 
+    public function test_a_monthly_nth_weekday_rule_finds_the_ordinal_weekday()
+    {
+        $rule = new RecurrenceRule('month', weekdays: [3], monthMode: 'nth_weekday', weekOfMonth: 3);
+
+        $next = $this->calculator->next($rule, $this->local('2026-07-15 09:00'));
+
+        // The third Wednesday of August 2026.
+        $this->assertSame('2026-08-19 09:00', $this->localString($next));
+    }
+
+    public function test_a_monthly_nth_weekday_rule_can_land_on_the_last_occurrence()
+    {
+        $rule = new RecurrenceRule('month', weekdays: [5], monthMode: 'nth_weekday', weekOfMonth: -1);
+
+        $next = $this->calculator->next($rule, $this->local('2026-07-01 09:00'));
+
+        // The last Friday of August 2026 — also its fourth, but found by
+        // counting back from the month's end rather than forward from its
+        // start, so a five-Friday month would not change the answer.
+        $this->assertSame('2026-08-28 09:00', $this->localString($next));
+    }
+
+    public function test_a_monthly_nth_weekday_rule_can_repeat_every_n_months()
+    {
+        $rule = new RecurrenceRule(
+            'month',
+            interval: 2,
+            weekdays: [1],
+            monthMode: 'nth_weekday',
+            weekOfMonth: 1,
+        );
+
+        $next = $this->calculator->next($rule, $this->local('2026-08-03 09:00'));
+
+        // The first Monday of October 2026, two months on.
+        $this->assertSame('2026-10-05 09:00', $this->localString($next));
+    }
+
+    public function test_a_yearly_nth_weekday_rule_keeps_the_same_month()
+    {
+        $rule = new RecurrenceRule('year', weekdays: [4], monthMode: 'nth_weekday', weekOfMonth: 4);
+
+        // The fourth Thursday of November, one year on — the month comes
+        // from stepping twelve months, same as the day-of-month case.
+        $next = $this->calculator->next($rule, $this->local('2025-11-27 09:00'));
+
+        $this->assertSame('2026-11-26 09:00', $this->localString($next));
+    }
+
     public function test_an_end_date_includes_the_occurrence_that_lands_on_it()
     {
         $next = $this->calculator->next(

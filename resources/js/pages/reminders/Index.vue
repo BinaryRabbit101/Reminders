@@ -23,6 +23,7 @@ import {
 import { index as listsIndex } from '@/routes/lists';
 import { index } from '@/routes/reminders';
 import type {
+    ListColorOption,
     Reminder,
     ReminderFormDefaults,
     ReminderListSummary,
@@ -30,15 +31,18 @@ import type {
 
 // Prop names are the server's own, snake_case included — Inertia passes the
 // page props through untouched.
-const { reminders, defaults, lists, active_list_id, timezone } = defineProps<{
-    reminders: Reminder[];
-    defaults: ReminderFormDefaults;
-    /** The viewer's own lists — the filter chips and the sheet's select. */
-    lists: ReminderListSummary[];
-    /** Which chip is lit; null for "All", and for an id that did not resolve. */
-    active_list_id: number | null;
-    timezone: string;
-}>();
+const { reminders, defaults, lists, active_list_id, timezone, palette } =
+    defineProps<{
+        reminders: Reminder[];
+        defaults: ReminderFormDefaults;
+        /** The viewer's own lists — the filter chips and the sheet's select. */
+        lists: ReminderListSummary[];
+        /** Which chip is lit; null for "All", and for an id that did not resolve. */
+        active_list_id: number | null;
+        timezone: string;
+        /** The fixed palette, for the sheet's inline "new list" dialog. */
+        palette: ListColorOption[];
+    }>();
 
 defineOptions({
     layout: {
@@ -266,6 +270,7 @@ function isOverdue(reminder: Reminder): boolean {
         :reminder="editing"
         :defaults="defaults"
         :lists="lists"
+        :palette="palette"
         :timezone="timezone"
     />
 

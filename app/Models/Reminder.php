@@ -30,6 +30,8 @@ use Illuminate\Support\Collection;
  * @property list<int>|null $repeat_weekdays
  * @property Carbon|null $repeat_until
  * @property int|null $repeat_anchor_day
+ * @property string|null $repeat_month_mode
+ * @property int|null $repeat_week_of_month
  * @property Carbon|null $completed_at
  * @property Carbon|null $snoozed_until
  * @property Carbon|null $created_at
@@ -40,6 +42,7 @@ use Illuminate\Support\Collection;
 #[Fillable([
     'user_id', 'list_id', 'title', 'notes', 'due_at', 'is_shared',
     'repeat_unit', 'repeat_interval', 'repeat_weekdays', 'repeat_until', 'repeat_anchor_day',
+    'repeat_month_mode', 'repeat_week_of_month',
     'completed_at', 'snoozed_until',
 ])]
 class Reminder extends Model
@@ -72,6 +75,7 @@ class Reminder extends Model
             // format('Y-m-d'), never shifted into another timezone.
             'repeat_until' => 'date',
             'repeat_anchor_day' => 'integer',
+            'repeat_week_of_month' => 'integer',
         ];
     }
 
@@ -186,6 +190,8 @@ class Reminder extends Model
             weekdays: $this->repeat_weekdays ?? [],
             until: $this->repeat_until?->format('Y-m-d'),
             anchorDay: $this->repeat_anchor_day,
+            monthMode: $this->repeat_month_mode,
+            weekOfMonth: $this->repeat_week_of_month,
         );
     }
 

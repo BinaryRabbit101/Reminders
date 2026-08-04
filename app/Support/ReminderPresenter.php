@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
  */
 final class ReminderPresenter
 {
-    /** ISO weekday number to the short name a repeat label uses. */
+    /** ISO weekday number to the short name a weekly repeat label uses. */
     private const WEEKDAY_NAMES = [
         1 => 'Mon',
         2 => 'Tue',
@@ -28,6 +28,20 @@ final class ReminderPresenter
         5 => 'Fri',
         6 => 'Sat',
         7 => 'Sun',
+    ];
+
+    /**
+     * ISO weekday number to the full name an nth-weekday label uses —
+     * "the third Wednesday" reads better in prose than "the third Wed".
+     */
+    private const WEEKDAY_FULL_NAMES = [
+        1 => 'Monday',
+        2 => 'Tuesday',
+        3 => 'Wednesday',
+        4 => 'Thursday',
+        5 => 'Friday',
+        6 => 'Saturday',
+        7 => 'Sunday',
     ];
 
     public function __construct(
@@ -107,6 +121,8 @@ final class ReminderPresenter
      *     repeat_interval: int,
      *     repeat_weekdays: list<int>,
      *     repeat_until: string|null,
+     *     repeat_month_mode: string|null,
+     *     repeat_week_of_month: int|null,
      * }
      */
     public function present(Reminder $reminder, ?User $viewer = null): array
@@ -167,6 +183,8 @@ final class ReminderPresenter
             'repeat_interval' => $rule === null ? 1 : $rule->interval,
             'repeat_weekdays' => $rule === null ? [] : $rule->sortedWeekdays(),
             'repeat_until' => $reminder->repeat_until?->format('Y-m-d'),
+            'repeat_month_mode' => $reminder->repeat_month_mode,
+            'repeat_week_of_month' => $reminder->repeat_week_of_month,
         ];
     }
 
@@ -189,6 +207,8 @@ final class ReminderPresenter
      *     repeat_interval: int,
      *     repeat_weekdays: list<int>,
      *     repeat_until: string|null,
+     *     repeat_month_mode: string|null,
+     *     repeat_week_of_month: int|null,
      * }
      */
     public function formDefaults(User $user): array
@@ -212,6 +232,8 @@ final class ReminderPresenter
             'repeat_interval' => 1,
             'repeat_weekdays' => [],
             'repeat_until' => null,
+            'repeat_month_mode' => null,
+            'repeat_week_of_month' => null,
         ];
     }
 
@@ -273,6 +295,15 @@ final class ReminderPresenter
                 fn (int $weekday): string => self::WEEKDAY_NAMES[$weekday],
                 $rule->sortedWeekdays(),
             ));
+        } elseif ($rule->isNthWeekday()) {
+            // "the 3rd Wednesday" — the same phrase for month and year;
+            // year additionally says which month, since stepping by twelve
+            // months never moves it.
+            $day = $this->weekOfMonthWord($rule->weekOfMonth)
+                .' '.self::WEEKDAY_FULL_NAMES[$rule->weekdays[0]];
+            $label .= $rule->unit === 'year'
+                ? ' on the '.$day.' of '.$local->format('M')
+                : ' on the '.$day;
         } elseif ($rule->unit === 'month') {
             $label .= ' on the '.$this->ordinal($rule->anchorDay ?? $local->day);
         } elseif ($rule->unit === 'year') {
@@ -303,6 +334,20 @@ final class ReminderPresenter
         };
 
         return $day.$suffix;
+    }
+
+    /**
+     * "third", "last" — how an nth-weekday rule's week-of-month is spoken.
+     */
+    private function weekOfMonthWord(int $weekOfMonth): string
+    {
+        return match ($weekOfMonth) {
+            1 => 'first',
+            2 => 'second',
+            3 => 'third',
+            4 => 'fourth',
+            default => 'last',
+        };
     }
 
     /**
