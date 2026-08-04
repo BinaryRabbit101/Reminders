@@ -19,6 +19,8 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             sidebarOpen: boolean;
+            /** Unread sent notifications — the nav badge, on every page. */
+            unreadNotificationCount: number;
             [key: string]: unknown;
         };
     }

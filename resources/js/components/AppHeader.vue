@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
-import { BookOpen, Folder, LayoutGrid, Menu, Search } from '@lucide/vue';
+import {
+    BellRing,
+    BookOpen,
+    CalendarCheck,
+    Folder,
+    History,
+    Menu,
+    Search,
+    Tags,
+} from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
@@ -35,8 +44,13 @@ import UserMenuContent from '@/components/UserMenuContent.vue';
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import { getInitials } from '@/composables/useInitials';
 import { toUrl } from '@/lib/utils';
-import { dashboard } from '@/routes';
+import { history, today } from '@/routes';
+import { index as lists } from '@/routes/lists';
+import { index as reminders } from '@/routes/reminders';
 import type { BreadcrumbItem, NavItem } from '@/types';
+
+/** A nav entry that may carry a count — only History does. */
+type HeaderNavItem = NavItem & { badge?: number };
 
 type Props = {
     breadcrumbs?: BreadcrumbItem[];
@@ -53,13 +67,33 @@ const { isCurrentUrl, whenCurrentUrl } = useCurrentUrl();
 const activeItemStyles =
     'text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100';
 
-const mainNavItems: NavItem[] = [
+// Shared from HandleInertiaRequests, so the badge is current on every page —
+// including the one that just cleared it.
+const unreadCount = computed(() => page.props.unreadNotificationCount ?? 0);
+
+const mainNavItems = computed<HeaderNavItem[]>(() => [
     {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
+        title: 'Today',
+        href: today(),
+        icon: CalendarCheck,
     },
-];
+    {
+        title: 'All Reminders',
+        href: reminders(),
+        icon: BellRing,
+    },
+    {
+        title: 'Lists',
+        href: lists(),
+        icon: Tags,
+    },
+    {
+        title: 'History',
+        href: history(),
+        icon: History,
+        badge: unreadCount.value,
+    },
+]);
 
 const rightNavItems: NavItem[] = [
     {
@@ -122,6 +156,20 @@ const rightNavItems: NavItem[] = [
                                             class="h-5 w-5"
                                         />
                                         {{ item.title }}
+                                        <span
+                                            v-if="item.badge"
+                                            class="ml-auto flex h-5 min-w-5 items-center justify-center rounded-md bg-primary px-1 text-xs font-medium text-primary-foreground tabular-nums"
+                                            data-test="unread-badge"
+                                        >
+                                            {{
+                                                item.badge > 99
+                                                    ? '99+'
+                                                    : item.badge
+                                            }}
+                                            <span class="sr-only">
+                                                unread notifications
+                                            </span>
+                                        </span>
                                     </Link>
                                 </nav>
                                 <div class="flex flex-col space-y-4">
@@ -146,7 +194,7 @@ const rightNavItems: NavItem[] = [
                     </Sheet>
                 </div>
 
-                <Link :href="dashboard()" class="flex items-center gap-x-2">
+                <Link :href="today()" class="flex items-center gap-x-2">
                     <AppLogo />
                 </Link>
 
@@ -178,6 +226,18 @@ const rightNavItems: NavItem[] = [
                                         class="mr-2 h-4 w-4"
                                     />
                                     {{ item.title }}
+                                    <span
+                                        v-if="item.badge"
+                                        class="ml-1.5 flex h-4 min-w-4 items-center justify-center rounded bg-primary px-1 text-[10px] font-medium text-primary-foreground tabular-nums"
+                                        data-test="unread-badge"
+                                    >
+                                        {{
+                                            item.badge > 99 ? '99+' : item.badge
+                                        }}
+                                        <span class="sr-only">
+                                            unread notifications
+                                        </span>
+                                    </span>
                                 </Link>
                                 <div
                                     v-if="isCurrentUrl(item.href)"

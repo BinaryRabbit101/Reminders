@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\NotificationHistory;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -35,6 +36,8 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
@@ -42,6 +45,17 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            // The nav's unread badge, on every page.
+            //
+            // A closure on purpose: this array is assembled *before* the
+            // controller runs, so a plain count would be the number from
+            // before the request did anything. Inertia resolves the closure
+            // while rendering the response instead, which is what lets
+            // visiting /history clear the badge in the very response that
+            // marks the entries read.
+            'unreadNotificationCount' => fn (): int => $user === null
+                ? 0
+                : NotificationHistory::unreadCountFor($user),
         ];
     }
 }

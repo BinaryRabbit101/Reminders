@@ -1,0 +1,330 @@
+<?php
+
+namespace App\Support;
+
+use App\Models\Reminder;
+use App\Models\User;
+use App\Notifications\ReminderDueNotification;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Carbon;
+
+/**
+ * The in-app record of everything that was sent: the `notifications` rows the
+ * delivery engine writes through the `database` channel, turned into the feed
+ * the /history page renders.
+ *
+ * Two rules this class exists to hold:
+ *
+ * 1. **The payload is the history, not the reminder.** Every entry reads its
+ *    title and occurrence out of `ReminderDueNotification::toArray()`
+ *    (`reminder_id`, `title`, `due_at` as ISO-8601 UTC), so an entry still
+ *    renders — with the title it was sent under — after the reminder itself is
+ *    deleted or renamed. The reminder is looked up only to offer a link to its
+ *    edit surface; a miss is simply "deleted".
+ * 2. **Days are local days.** Grouping happens on the *reader's* calendar
+ *    (their timezone, or the app default — ARCHITECTURE.md §1 plus
+ *    `User::timezone()`), exactly like TodayBoard buckets — a 23:30
+ *    local send belongs to that local day even though its UTC date has already
+ *    rolled over. Every string a page receives is formatted here, through
+ *    ReminderPresenter; the client never does timezone math.
+ *
+ * The occurrence in the payload is byte-identical to the matching
+ * `reminder_dispatches.due_at` (delivery-engine close-out), so history and the
+ * dispatch log can always be joined on `(reminder_id, due_at)` — nothing here
+ * needs that join, because the payload already carries everything the feed
+ * shows, but the correspondence is deliberate and must be preserved.
+ */
+final class NotificationHistory
+{
+    /**
+     * The only notification type this feed shows — and the only one whose
+     * unread rows the badge counts and the page clears. Scoping all three to
+     * one type keeps them consistent: a future notification class cannot leave
+     * a badge lit that visiting /history can never turn off.
+     *
+     * @var class-string<ReminderDueNotification>
+     */
+    public const TYPE = ReminderDueNotification::class;
+
+    /**
+     * How many entries the feed carries at most. The page is a single scroll
+     * with no pagination, and pruning only reaches read entries older than 90
+     * days, so a busy recurring reminder could otherwise grow it without
+     * bound.
+     */
+    public const MAX_ENTRIES = 200;
+
+    /**
+     * How long a read entry is kept before `reminders:prune-notifications`
+     * deletes it, in days. Unread entries are never pruned — they are the
+     * pushes nobody has looked at yet.
+     */
+    public const PRUNE_AFTER_DAYS = 90;
+
+    /**
+     * A history. It holds no state of its own — every local day it groups on
+     * belongs to the reader it is opened {@see openFor()}.
+     */
+    public static function make(): self
+    {
+        return new self;
+    }
+
+    /**
+     * How many sent notifications this user has not seen yet — the number on
+     * the nav badge, shared to every page by HandleInertiaRequests.
+     */
+    public static function unreadCountFor(User $user): int
+    {
+        return $user->unreadNotifications()->where('type', self::TYPE)->count();
+    }
+
+    /**
+     * Open the history: build the feed, *then* mark everything read.
+     *
+     * The order is the whole point and is why this is one method rather than
+     * two the caller has to sequence. The unread flags are captured while they
+     * are still true, so the visit that clears the badge is also the visit
+     * that shows you what was new — and by the time Inertia resolves the
+     * shared unread count (a closure, evaluated after the controller returns)
+     * the badge already reads zero.
+     *
+     * `total` counts the entries in this window rather than the whole table;
+     * `is_capped` is how the page knows older ones exist beyond it.
+     *
+     * @return array{
+     *     days: list<array{key: string, label: string, entries: list<array<string, mixed>>}>,
+     *     unread_count: int,
+     *     total: int,
+     *     max_entries: int,
+     *     is_capped: bool,
+     * }
+     */
+    public function openFor(User $user): array
+    {
+        // The feed is grouped and stamped on the *reader's* clock: two
+        // household members in different timezones see the same sends filed
+        // under their own local days.
+        $timezone = $user->timezone();
+        $presenter = ReminderPresenter::for($user);
+
+        $notifications = $this->recent($user);
+        $reminders = $this->presentedReminders($user, $presenter, $notifications);
+        $today = CarbonImmutable::now($timezone)->startOfDay();
+
+        $unread = 0;
+        $days = [];
+
+        foreach ($notifications as $notification) {
+            $entry = $this->entry($notification, $presenter, $reminders);
+
+            if ($entry['is_unread'] === true) {
+                $unread++;
+            }
+
+            $day = $this->occurredAt($notification)->setTimezone($timezone);
+            $key = $day->format('Y-m-d');
+
+            $days[$key] ??= [
+                'key' => $key,
+                'label' => $this->dayLabel($day, $today),
+                'entries' => [],
+            ];
+
+            $days[$key]['entries'][] = $entry;
+        }
+
+        $this->markAllRead($user);
+
+        return [
+            'days' => array_values($days),
+            'unread_count' => $unread,
+            'total' => $notifications->count(),
+            'max_entries' => self::MAX_ENTRIES,
+            'is_capped' => $notifications->count() >= self::MAX_ENTRIES,
+        ];
+    }
+
+    /**
+     * Mark every sent notification this user has read.
+     *
+     * The bulk equivalent of `DatabaseNotification::markAsRead()` — one
+     * statement rather than one model per row, which matters on a feed that is
+     * allowed to be hundreds of entries long.
+     */
+    public function markAllRead(User $user): int
+    {
+        return $user->unreadNotifications()
+            ->where('type', self::TYPE)
+            ->update(['read_at' => Carbon::now()]);
+    }
+
+    /**
+     * The newest entries first — the feed order. `notifications()` already
+     * sorts by `created_at desc`; the cap is applied on that order so the page
+     * always shows the most recent window.
+     *
+     * @return EloquentCollection<int, DatabaseNotification>
+     */
+    private function recent(User $user): EloquentCollection
+    {
+        /** @var EloquentCollection<int, DatabaseNotification> $notifications */
+        $notifications = $user->notifications()
+            ->where('type', self::TYPE)
+            ->limit(self::MAX_ENTRIES)
+            ->get();
+
+        return $notifications;
+    }
+
+    /**
+     * One presented reminder per id still reachable by this viewer, keyed by
+     * id — the link target for entries whose reminder survives.
+     *
+     * Visibility goes through the same `visibleTo` scope every other surface
+     * uses (shared-reminders close-out), so a reminder that has been deleted
+     * *or* is no longer shared with you reads the same way: gone. Presenting
+     * once per reminder rather than once per entry matters because a recurring
+     * reminder owns many entries.
+     *
+     * @param  EloquentCollection<int, DatabaseNotification>  $notifications
+     * @return array<int, array<string, mixed>>
+     */
+    private function presentedReminders(
+        User $user,
+        ReminderPresenter $presenter,
+        EloquentCollection $notifications,
+    ): array {
+        $ids = [];
+
+        foreach ($notifications as $notification) {
+            $id = $this->reminderId($notification);
+
+            if ($id !== null) {
+                $ids[$id] = $id;
+            }
+        }
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $presented = [];
+
+        foreach (Reminder::query()->visibleTo($user)->with(['user', 'list'])->whereKey($ids)->get() as $reminder) {
+            $presented[$reminder->id] = $presenter->present($reminder, $user);
+        }
+
+        return $presented;
+    }
+
+    /**
+     * One line of the feed.
+     *
+     * @param  array<int, array<string, mixed>>  $reminders
+     * @return array{
+     *     id: string,
+     *     title: string,
+     *     time_label: string,
+     *     due_label: string,
+     *     sent_relative: string,
+     *     is_unread: bool,
+     *     reminder: array<string, mixed>|null,
+     * }
+     */
+    private function entry(
+        DatabaseNotification $notification,
+        ReminderPresenter $presenter,
+        array $reminders,
+    ): array {
+        $occurredAt = $this->occurredAt($notification);
+        $reminderId = $this->reminderId($notification);
+
+        return [
+            'id' => (string) $notification->getKey(),
+            // The title as it was sent, not as the reminder reads now — the
+            // history is a record of what went out.
+            'title' => $this->payloadString($notification, 'title') ?? 'Reminder',
+            'time_label' => $presenter->toLocal($occurredAt)->format('g:i A'),
+            'due_label' => $presenter->label($occurredAt),
+            'sent_relative' => $this->sentAt($notification)->diffForHumans(),
+            'is_unread' => $notification->read_at === null,
+            // Null is the "deleted" state the page renders instead of a link.
+            'reminder' => $reminderId === null ? null : ($reminders[$reminderId] ?? null),
+        ];
+    }
+
+    /**
+     * The occurrence this entry is about, in UTC — `due_at` from the payload,
+     * falling back to when the row was written if a payload ever lacks it.
+     */
+    private function occurredAt(DatabaseNotification $notification): CarbonImmutable
+    {
+        $dueAt = $this->payloadString($notification, 'due_at');
+
+        return $dueAt === null
+            ? $this->sentAt($notification)
+            : CarbonImmutable::parse($dueAt)->utc();
+    }
+
+    /**
+     * When the notification row was written — which is when the push went out.
+     */
+    private function sentAt(DatabaseNotification $notification): CarbonImmutable
+    {
+        return CarbonImmutable::instance($notification->created_at ?? Carbon::now())->utc();
+    }
+
+    /**
+     * The reminder this entry points at, or null when the payload has no
+     * usable id.
+     */
+    private function reminderId(DatabaseNotification $notification): ?int
+    {
+        $data = $notification->data;
+
+        if (! isset($data['reminder_id']) || ! is_numeric($data['reminder_id'])) {
+            return null;
+        }
+
+        return (int) $data['reminder_id'];
+    }
+
+    /**
+     * A string field out of the stored payload, or null when it is missing or
+     * the wrong shape. The payload is JSON written by an older release of this
+     * app — it is read defensively, never assumed.
+     */
+    private function payloadString(DatabaseNotification $notification, string $key): ?string
+    {
+        $data = $notification->data;
+
+        if (! isset($data[$key]) || ! is_string($data[$key])) {
+            return null;
+        }
+
+        return $data[$key];
+    }
+
+    /**
+     * "Today", "Yesterday", "Mon, Aug 3" — and the year as well once the day
+     * is old enough for it to be ambiguous.
+     */
+    private function dayLabel(CarbonInterface $day, CarbonImmutable $today): string
+    {
+        if ($day->isSameDay($today)) {
+            return 'Today';
+        }
+
+        if ($day->isSameDay($today->subDay())) {
+            return 'Yesterday';
+        }
+
+        return $day->year === $today->year
+            ? $day->format('D, M j')
+            : $day->format('D, M j, Y');
+    }
+}
