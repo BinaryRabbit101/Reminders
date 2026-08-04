@@ -4,6 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import AuthLayout from '@/layouts/AuthLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { initializeFlashToast } from '@/lib/flashToast';
+import { initializeKeyboardInset } from '@/lib/keyboardInset';
 import { registerServiceWorker } from '@/lib/serviceWorker';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
@@ -32,6 +33,9 @@ initializeTheme();
 
 // This will listen for flash toast data from the server...
 initializeFlashToast();
+
+// This keeps bottom sheets above the on-screen keyboard on iOS...
+initializeKeyboardInset();
 
 // This makes the app installable as a PWA (never throws into the page)...
 registerServiceWorker();

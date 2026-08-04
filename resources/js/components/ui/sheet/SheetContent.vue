@@ -45,7 +45,10 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
         side === 'top'
           && 'data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 h-auto border-b',
         side === 'bottom'
-          && 'data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto border-t',
+          // bottom tracks --keyboard-inset (see resources/js/lib/keyboardInset.ts)
+          // rather than sitting at a bare 0, so the sheet slides up above an
+          // open on-screen keyboard instead of ending up underneath it.
+          && 'data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-[var(--keyboard-inset,0px)] h-auto border-t pb-[env(safe-area-inset-bottom)]',
         props.class)"
       v-bind="{ ...$attrs, ...forwarded }"
     >

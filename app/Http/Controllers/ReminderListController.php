@@ -26,11 +26,19 @@ class ReminderListController extends Controller
      */
     public function index(Request $request): Response
     {
+        $user = $request->user();
+        $presenter = ReminderPresenter::for($user);
+
         return Inertia::render('lists/Index', [
-            'lists' => ReminderPresenter::for($request->user())->lists($request->user()),
+            'lists' => $presenter->lists($user),
             // The palette travels with the page so the swatch picker and the
             // badges are drawn from one definition (App\Support\ListColor).
             'palette' => ListColor::options(),
+            // Every list row can open the reminder sheet directly, filed
+            // into that list — it needs the same three props the reminders
+            // index gives it.
+            'defaults' => $presenter->formDefaults($user),
+            'timezone' => $user->timezone(),
         ]);
     }
 

@@ -353,7 +353,7 @@ function submitListDialog(): void {
     <Sheet :open="open" @update:open="emit('update:open', $event)">
         <SheetContent
             side="bottom"
-            class="max-h-[92svh] gap-0 overflow-y-auto rounded-t-xl"
+            class="max-h-[calc(92svh-var(--keyboard-inset,0px))] gap-0 overflow-y-auto rounded-t-xl"
         >
             <Form
                 :key="reminder?.id ?? 'new'"

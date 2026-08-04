@@ -73,6 +73,17 @@ function openCreate(): void {
     sheetOpen.value = true;
 }
 
+/**
+ * What the create form opens with — the server's defaults, but filed into
+ * whichever list the view is currently filtered on. Editing an existing
+ * reminder is unaffected: its own list_id always wins over this (see
+ * ReminderFormSheet's syncFromProps).
+ */
+const createDefaults = computed<ReminderFormDefaults>(() => ({
+    ...defaults,
+    list_id: active_list_id ?? defaults.list_id,
+}));
+
 function openEdit(reminder: Reminder): void {
     editing.value = reminder;
     sheetOpen.value = true;
@@ -268,7 +279,7 @@ function isOverdue(reminder: Reminder): boolean {
     <ReminderFormSheet
         v-model:open="sheetOpen"
         :reminder="editing"
-        :defaults="defaults"
+        :defaults="createDefaults"
         :lists="lists"
         :palette="palette"
         :timezone="timezone"

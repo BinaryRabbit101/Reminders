@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import { Form, Head, Link } from '@inertiajs/vue3';
-import { FolderOpen, ListPlus, Pencil, Plus, Trash2 } from '@lucide/vue';
+import {
+    BellPlus,
+    FolderOpen,
+    ListPlus,
+    Pencil,
+    Plus,
+    Trash2,
+} from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import ReminderListController from '@/actions/App/Http/Controllers/ReminderListController';
 import InputError from '@/components/InputError.vue';
+import ReminderFormSheet from '@/components/ReminderFormSheet.vue';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -28,13 +36,17 @@ import { index as remindersIndex } from '@/routes/reminders';
 import type {
     ListColorOption,
     ListColorToken,
+    ReminderFormDefaults,
     ReminderListSummary,
 } from '@/types';
 
-const { lists, palette } = defineProps<{
+const { lists, palette, defaults, timezone } = defineProps<{
     lists: ReminderListSummary[];
     /** The fixed palette, straight from App\Support\ListColor. */
     palette: ListColorOption[];
+    /** For the "add a reminder" sheet each row can open. */
+    defaults: ReminderFormDefaults;
+    timezone: string;
 }>();
 
 defineOptions({
@@ -87,6 +99,20 @@ function openEdit(list: ReminderListSummary): void {
     editing.value = list;
     sheetOpen.value = true;
 }
+
+const reminderSheetOpen = ref(false);
+const reminderListId = ref<number | null>(null);
+
+function openAddReminder(list: ReminderListSummary): void {
+    reminderListId.value = list.id;
+    reminderSheetOpen.value = true;
+}
+
+/** The create form's defaults, filed straight into the row it was opened from. */
+const reminderDefaults = computed<ReminderFormDefaults>(() => ({
+    ...defaults,
+    list_id: reminderListId.value,
+}));
 
 /** "3 reminders" — the count is what makes deleting feel safe or not. */
 function countLabel(list: ReminderListSummary): string {
@@ -162,6 +188,15 @@ function countLabel(list: ReminderListSummary): string {
                     <Button
                         variant="ghost"
                         size="icon"
+                        :aria-label="`Add a reminder to ${list.name}`"
+                        data-test="add-reminder-to-list-button"
+                        @click="openAddReminder(list)"
+                    >
+                        <BellPlus />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
                         :aria-label="`Edit ${list.name}`"
                         @click="openEdit(list)"
                     >
@@ -192,7 +227,7 @@ function countLabel(list: ReminderListSummary): string {
     <Sheet :open="sheetOpen" @update:open="sheetOpen = $event">
         <SheetContent
             side="bottom"
-            class="max-h-[92svh] gap-0 overflow-y-auto rounded-t-xl"
+            class="max-h-[calc(92svh-var(--keyboard-inset,0px))] gap-0 overflow-y-auto rounded-t-xl"
         >
             <Form
                 :key="editing?.id ?? 'new'"
@@ -281,6 +316,15 @@ function countLabel(list: ReminderListSummary): string {
             </Form>
         </SheetContent>
     </Sheet>
+
+    <ReminderFormSheet
+        v-model:open="reminderSheetOpen"
+        :reminder="null"
+        :defaults="reminderDefaults"
+        :lists="lists"
+        :palette="palette"
+        :timezone="timezone"
+    />
 
     <Dialog v-model:open="deleteOpen">
         <DialogContent v-if="deleting">

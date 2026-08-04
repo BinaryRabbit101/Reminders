@@ -50,6 +50,7 @@ class ReminderListTest extends TestCase
                 ->where('lists.0.color_hex', ListColor::Emerald->hex())
                 ->where('lists.0.reminder_count', 1)
                 ->has('palette', count(ListColor::cases()))
+                ->etc()
             );
     }
 
