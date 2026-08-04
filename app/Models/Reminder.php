@@ -281,10 +281,20 @@ class Reminder extends Model
     public function complete(RecurrenceCalculator $calculator): array
     {
         $prior = $this->currentState();
+        $occurredAt = $this->effectiveDueAt();
 
         if (! $this->advanceOrComplete($calculator)) {
             $this->forceFill(['completed_at' => Carbon::now()])->save();
         }
+
+        ReminderCompletion::query()->create([
+            'user_id' => $this->user_id,
+            'reminder_id' => $this->id,
+            'title' => $this->title,
+            'is_shared' => $this->is_shared,
+            'occurred_at' => $occurredAt,
+            'completed_at' => Carbon::now(),
+        ]);
 
         return $prior;
     }

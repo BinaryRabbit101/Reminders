@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Reminder;
+use App\Models\ReminderCompletion;
 use App\Models\User;
 use App\Notifications\ReminderDueNotification;
 use Carbon\CarbonImmutable;
@@ -112,7 +113,8 @@ final class NotificationHistory
         $presenter = ReminderPresenter::for($user);
 
         $notifications = $this->recent($user);
-        $reminders = $this->presentedReminders($user, $presenter, $notifications);
+        $completions = $this->recentCompletions($user);
+        $reminders = $this->presentedReminders($user, $presenter, $notifications, $completions);
         $today = CarbonImmutable::now($timezone)->startOfDay();
 
         $unread = 0;
@@ -125,27 +127,68 @@ final class NotificationHistory
                 $unread++;
             }
 
-            $day = $this->occurredAt($notification)->setTimezone($timezone);
-            $key = $day->format('Y-m-d');
-
-            $days[$key] ??= [
-                'key' => $key,
-                'label' => $this->dayLabel($day, $today),
-                'entries' => [],
-            ];
-
-            $days[$key]['entries'][] = $entry;
+            // Filed under the occurrence's own day (its due date), not when
+            // the push happened to go out — see the class-level note on why.
+            $this->fileEntry($days, $entry, $this->occurredAt($notification)->setTimezone($timezone), $today);
         }
+
+        foreach ($completions as $completion) {
+            $entry = $this->completionEntry($completion, $presenter, $reminders);
+
+            // Filed under the day it was actually completed — an activity
+            // log reads by when you did the thing, not by whenever the
+            // occurrence had originally been due.
+            $this->fileEntry($days, $entry, $presenter->toLocal(CarbonImmutable::instance($completion->completed_at)), $today);
+        }
+
+        foreach ($days as &$day) {
+            usort($day['entries'], fn (array $a, array $b): int => $b['sort_at'] <=> $a['sort_at']);
+
+            $day['entries'] = array_map(
+                fn (array $entry): array => array_diff_key($entry, ['sort_at' => true]),
+                $day['entries'],
+            );
+        }
+
+        unset($day);
+
+        // String day keys ("2026-08-04") sort lexicographically the same way
+        // they sort chronologically, so a plain reverse key-sort is enough —
+        // no need to pull in a Collection for one comparison.
+        krsort($days);
+        $days = array_values($days);
 
         $this->markAllRead($user);
 
         return [
-            'days' => array_values($days),
+            'days' => $days,
             'unread_count' => $unread,
-            'total' => $notifications->count(),
+            'total' => $notifications->count() + $completions->count(),
             'max_entries' => self::MAX_ENTRIES,
-            'is_capped' => $notifications->count() >= self::MAX_ENTRIES,
+            'is_capped' => $notifications->count() >= self::MAX_ENTRIES || $completions->count() >= self::MAX_ENTRIES,
         ];
+    }
+
+    /**
+     * File one entry into its day bucket, keyed on the local day it belongs
+     * under. `sort_at` is a bookkeeping field only — stripped before the
+     * feed is returned — that lets entries from both sources be interleaved
+     * newest-first once a day's bucket is complete.
+     *
+     * @param  array<string, array{key: string, label: string, entries: list<array<string, mixed>>}>  $days
+     * @param  array<string, mixed>  $entry
+     */
+    private function fileEntry(array &$days, array $entry, CarbonInterface $local, CarbonImmutable $today): void
+    {
+        $key = $local->format('Y-m-d');
+
+        $days[$key] ??= [
+            'key' => $key,
+            'label' => $this->dayLabel($local, $today),
+            'entries' => [],
+        ];
+
+        $days[$key]['entries'][] = [...$entry, 'sort_at' => $local->timestamp];
     }
 
     /**
@@ -181,6 +224,24 @@ final class NotificationHistory
     }
 
     /**
+     * The completions this user may see, newest first, capped the same way
+     * {@see recent()} caps notifications.
+     *
+     * @return EloquentCollection<int, ReminderCompletion>
+     */
+    private function recentCompletions(User $user): EloquentCollection
+    {
+        /** @var EloquentCollection<int, ReminderCompletion> $completions */
+        $completions = ReminderCompletion::query()
+            ->visibleTo($user)
+            ->latest('completed_at')
+            ->limit(self::MAX_ENTRIES)
+            ->get();
+
+        return $completions;
+    }
+
+    /**
      * One presented reminder per id still reachable by this viewer, keyed by
      * id — the link target for entries whose reminder survives.
      *
@@ -191,12 +252,14 @@ final class NotificationHistory
      * reminder owns many entries.
      *
      * @param  EloquentCollection<int, DatabaseNotification>  $notifications
+     * @param  EloquentCollection<int, ReminderCompletion>  $completions
      * @return array<int, array<string, mixed>>
      */
     private function presentedReminders(
         User $user,
         ReminderPresenter $presenter,
         EloquentCollection $notifications,
+        EloquentCollection $completions,
     ): array {
         $ids = [];
 
@@ -205,6 +268,12 @@ final class NotificationHistory
 
             if ($id !== null) {
                 $ids[$id] = $id;
+            }
+        }
+
+        foreach ($completions as $completion) {
+            if ($completion->reminder_id !== null) {
+                $ids[$completion->reminder_id] = $completion->reminder_id;
             }
         }
 
@@ -227,6 +296,7 @@ final class NotificationHistory
      * @param  array<int, array<string, mixed>>  $reminders
      * @return array{
      *     id: string,
+     *     type: 'sent',
      *     title: string,
      *     time_label: string,
      *     due_label: string,
@@ -245,6 +315,7 @@ final class NotificationHistory
 
         return [
             'id' => (string) $notification->getKey(),
+            'type' => 'sent',
             // The title as it was sent, not as the reminder reads now — the
             // history is a record of what went out.
             'title' => $this->payloadString($notification, 'title') ?? 'Reminder',
@@ -254,6 +325,44 @@ final class NotificationHistory
             'is_unread' => $notification->read_at === null,
             // Null is the "deleted" state the page renders instead of a link.
             'reminder' => $reminderId === null ? null : ($reminders[$reminderId] ?? null),
+        ];
+    }
+
+    /**
+     * One line of the feed for a completed reminder — the sibling of
+     * {@see entry()}. `time_label`/`sent_relative` describe *when it was
+     * completed*, not the occurrence's original due moment — that moment is
+     * still available via `due_label`, same as a sent entry.
+     *
+     * @param  array<int, array<string, mixed>>  $reminders
+     * @return array{
+     *     id: string,
+     *     type: 'completed',
+     *     title: string,
+     *     time_label: string,
+     *     due_label: string,
+     *     sent_relative: string,
+     *     is_unread: bool,
+     *     reminder: array<string, mixed>|null,
+     * }
+     */
+    private function completionEntry(
+        ReminderCompletion $completion,
+        ReminderPresenter $presenter,
+        array $reminders,
+    ): array {
+        $completedAt = CarbonImmutable::instance($completion->completed_at)->utc();
+        $occurredAt = CarbonImmutable::instance($completion->occurred_at)->utc();
+
+        return [
+            'id' => 'completed-'.$completion->getKey(),
+            'type' => 'completed',
+            'title' => $completion->title,
+            'time_label' => $presenter->toLocal($completedAt)->format('g:i A'),
+            'due_label' => $presenter->label($occurredAt),
+            'sent_relative' => $completedAt->diffForHumans(),
+            'is_unread' => false,
+            'reminder' => $completion->reminder_id === null ? null : ($reminders[$completion->reminder_id] ?? null),
         ];
     }
 

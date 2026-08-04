@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { Inbox, Trash2 } from '@lucide/vue';
+import { CircleCheckBig, Inbox, Trash2 } from '@lucide/vue';
 import { ref } from 'vue';
 import ReminderFormSheet from '@/components/ReminderFormSheet.vue';
 import { history as historyRoute } from '@/routes';
@@ -101,7 +101,11 @@ function openEdit(entry: HistoryEntry): void {
                             : 'border-sidebar-border/70 dark:border-sidebar-border'
                     "
                     :data-test="
-                        entry.is_unread ? 'history-unread' : 'history-read'
+                        entry.type === 'completed'
+                            ? 'history-completed'
+                            : entry.is_unread
+                              ? 'history-unread'
+                              : 'history-read'
                     "
                 >
                     <!-- A deleted reminder has no edit surface left to open,
@@ -125,8 +129,13 @@ function openEdit(entry: HistoryEntry): void {
                             <span
                                 class="flex items-start gap-1.5 font-medium break-words"
                             >
+                                <CircleCheckBig
+                                    v-if="entry.type === 'completed'"
+                                    class="mt-0.5 size-3.5 shrink-0 text-primary"
+                                    aria-hidden="true"
+                                />
                                 <span
-                                    v-if="entry.is_unread"
+                                    v-else-if="entry.is_unread"
                                     class="mt-1.5 size-2 shrink-0 rounded-full bg-primary"
                                     aria-hidden="true"
                                 ></span>
@@ -139,7 +148,12 @@ function openEdit(entry: HistoryEntry): void {
                             </span>
 
                             <span class="block text-sm text-muted-foreground">
-                                {{ entry.sent_relative }}
+                                <template v-if="entry.type === 'completed'">
+                                    Completed {{ entry.sent_relative }}
+                                </template>
+                                <template v-else>
+                                    {{ entry.sent_relative }}
+                                </template>
                                 <span aria-hidden="true">&middot;</span>
                                 {{ entry.due_label }}
                             </span>

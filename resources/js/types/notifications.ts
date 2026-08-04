@@ -7,15 +7,17 @@ import type { Reminder } from './reminders';
  */
 export type HistoryEntry = {
     id: string;
-    /** The title as it was sent, which may differ from the reminder's now. */
+    /** Whether this row is a push that went out, or a completion log entry. */
+    type: 'sent' | 'completed';
+    /** The title as it was sent/completed, which may differ from the reminder's now. */
     title: string;
-    /** "9:00 AM" — the occurrence, on the local clock. */
+    /** "9:00 AM" — when this entry's event happened, on the local clock. */
     time_label: string;
-    /** "Mon, Aug 3, 9:00 AM" — the same moment, spelled in full. */
+    /** "Mon, Aug 3, 9:00 AM" — the occurrence's own due moment, spelled in full. */
     due_label: string;
-    /** "2 hours ago" — when the notification actually went out. */
+    /** "2 hours ago" — when the entry's event (send or completion) happened. */
     sent_relative: string;
-    /** True until the visit that renders it; opening /history clears it. */
+    /** True until the visit that renders it; opening /history clears it. Always false for `completed`. */
     is_unread: boolean;
     /** Null when the reminder is gone — the entry then reads as deleted. */
     reminder: Reminder | null;
