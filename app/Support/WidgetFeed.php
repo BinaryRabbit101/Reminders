@@ -63,9 +63,17 @@ final class WidgetFeed
      * ordering is the whole point of the widget — the thing you are late for
      * belongs above the thing you are not.
      *
+     * `upcoming` only exists to spend row budget `today` didn't use — a quiet
+     * day with two things due leaves four rows of blank space on a medium
+     * widget otherwise. It never competes with `today` for room: the cap is
+     * `MAX_ROWS - count(today)`, so attention-list rows always win the space
+     * first, and a full attention list means an empty (not truncated)
+     * `upcoming`.
+     *
      * @return array{
      *     overdue_count: int,
      *     today: list<array{time: string, title: string, list_color: string|null, is_overdue: bool}>,
+     *     upcoming: list<array{time: string, title: string, list_color: string|null}>,
      *     next_upcoming: array{when: string, title: string}|null,
      *     pending_total: int,
      *     open_url: string,
@@ -94,6 +102,21 @@ final class WidgetFeed
             ];
         }
 
+        $upcoming = [];
+        $spareRows = self::MAX_ROWS - count($rows);
+
+        if ($spareRows > 0) {
+            foreach ($this->upcomingAfter($user, $endOfToday, $spareRows) as $reminder) {
+                $at = $reminder->effectiveDueAt();
+
+                $upcoming[] = [
+                    'time' => $this->rowTime($at->setTimezone($timezone), $local),
+                    'title' => $reminder->title,
+                    'list_color' => $this->listColor($reminder, $user),
+                ];
+            }
+        }
+
         return [
             // Counted rather than tallied from the rows above: the list is
             // capped and the count is not, and "3 overdue" with two rows
@@ -104,6 +127,7 @@ final class WidgetFeed
                 ->whereRaw(Reminder::EFFECTIVE_DUE_AT.' < ?', [$now->format('Y-m-d H:i:s')])
                 ->count(),
             'today' => $rows,
+            'upcoming' => $upcoming,
             'next_upcoming' => $this->nextUpcoming($user, $now, $local),
             'pending_total' => Reminder::query()->visibleTo($user)->pending()->count(),
             // Where a tap lands. `app.url` rather than the request's own host:
@@ -172,6 +196,29 @@ final class WidgetFeed
             // in SQL: the rows are already in the order the widget wants
             // them, and everything past the sixth is a number, not a row.
             ->limit(self::MAX_ROWS)
+            ->get();
+    }
+
+    /**
+     * Pending reminders due after local midnight, soonest first — what fills
+     * the attention list's leftover row budget.
+     *
+     * `$limit` is the caller's spare capacity, never {@see MAX_ROWS} itself:
+     * this only ever spends room `today` left unused.
+     *
+     * @return Collection<int, Reminder>
+     */
+    private function upcomingAfter(User $user, CarbonInterface $endOfToday, int $limit): Collection
+    {
+        return Reminder::query()
+            ->visibleTo($user)
+            ->with('list')
+            ->pending()
+            ->whereRaw(Reminder::EFFECTIVE_DUE_AT.' > ?', [
+                $endOfToday->copy()->utc()->format('Y-m-d H:i:s'),
+            ])
+            ->orderByRaw(Reminder::EFFECTIVE_DUE_AT.' asc')
+            ->limit($limit)
             ->get();
     }
 

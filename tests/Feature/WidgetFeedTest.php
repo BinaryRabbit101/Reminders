@@ -61,6 +61,7 @@ class WidgetFeedTest extends TestCase
             ->assertJsonStructure([
                 'overdue_count',
                 'today',
+                'upcoming',
                 'next_upcoming',
                 'pending_total',
                 'open_url',
@@ -228,6 +229,69 @@ class WidgetFeedTest extends TestCase
         $response->assertJsonCount(WidgetFeed::MAX_ROWS, 'today');
         $response->assertJsonPath('overdue_count', 9);
         $response->assertJsonPath('pending_total', 9);
+    }
+
+    public function test_upcoming_fills_the_row_budget_todays_list_left_spare()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-03 12:00', 'America/Chicago'));
+
+        $user = $this->tokenHolder();
+
+        // One row today, five rows of budget spare out of MAX_ROWS (6).
+        $this->remind($user, '2026-08-03 15:00', 'Call the vet');
+        $this->remind($user, '2026-08-04 09:00', 'Water plants');
+        $this->remind($user, '2026-08-05 09:00', 'Pay rent');
+
+        $response = $this->getJson($this->feedUrl($user))->assertOk();
+
+        $response->assertJsonCount(1, 'today');
+        $response->assertJsonCount(2, 'upcoming');
+        $response->assertJsonPath('upcoming.0.title', 'Water plants');
+        $response->assertJsonPath('upcoming.1.title', 'Pay rent');
+        // Not today, so the label is a date, not a bare time — same rule an
+        // overdue row from an earlier day follows.
+        $response->assertJsonPath('upcoming.0.time', 'Aug 4');
+    }
+
+    public function test_upcoming_is_empty_when_todays_list_already_fills_the_row_budget()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-03 12:00', 'America/Chicago'));
+
+        $user = $this->tokenHolder();
+
+        for ($i = 1; $i <= WidgetFeed::MAX_ROWS; $i++) {
+            $this->remind($user, '2026-08-03 0'.$i.':00', "Today {$i}");
+        }
+
+        $this->remind($user, '2026-08-04 09:00', 'Water plants');
+
+        $response = $this->getJson($this->feedUrl($user))->assertOk();
+
+        $response->assertJsonCount(WidgetFeed::MAX_ROWS, 'today');
+        $response->assertJsonCount(0, 'upcoming');
+    }
+
+    public function test_upcoming_never_exceeds_the_leftover_row_budget()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-03 12:00', 'America/Chicago'));
+
+        $user = $this->tokenHolder();
+
+        // Four rows today leaves two spare out of MAX_ROWS (6).
+        for ($i = 1; $i <= 4; $i++) {
+            $this->remind($user, '2026-08-03 0'.$i.':00', "Today {$i}");
+        }
+
+        for ($i = 1; $i <= 5; $i++) {
+            $this->remind($user, '2026-08-0'.($i + 4).' 09:00', "Later {$i}");
+        }
+
+        $response = $this->getJson($this->feedUrl($user))->assertOk();
+
+        $response->assertJsonCount(4, 'today');
+        $response->assertJsonCount(2, 'upcoming');
+        $response->assertJsonPath('upcoming.0.title', 'Later 1');
+        $response->assertJsonPath('upcoming.1.title', 'Later 2');
     }
 
     public function test_an_overdue_row_from_an_earlier_day_shows_its_date()
