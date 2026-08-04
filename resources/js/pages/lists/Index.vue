@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { Form, Head, Link } from '@inertiajs/vue3';
+import { Form, Head, Link, router } from '@inertiajs/vue3';
 import {
     BellPlus,
+    FolderInput,
     FolderOpen,
     ListPlus,
     Pencil,
     Plus,
+    Search,
     Trash2,
 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import ReminderListController from '@/actions/App/Http/Controllers/ReminderListController';
 import InputError from '@/components/InputError.vue';
+import ListBadge from '@/components/ListBadge.vue';
 import ReminderFormSheet from '@/components/ReminderFormSheet.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -36,17 +39,21 @@ import { index as remindersIndex } from '@/routes/reminders';
 import type {
     ListColorOption,
     ListColorToken,
+    Reminder,
     ReminderFormDefaults,
     ReminderListSummary,
 } from '@/types';
 
-const { lists, palette, defaults, timezone } = defineProps<{
+const { lists, palette, defaults, timezone, reminders } = defineProps<{
     lists: ReminderListSummary[];
     /** The fixed palette, straight from App\Support\ListColor. */
     palette: ListColorOption[];
     /** For the "add a reminder" sheet each row can open. */
     defaults: ReminderFormDefaults;
     timezone: string;
+    /** The "add an existing reminder" picker's candidates — the user's own
+     *  pending reminders, soonest first. */
+    reminders: Reminder[];
 }>();
 
 defineOptions({
@@ -117,6 +124,73 @@ const reminderDefaults = computed<ReminderFormDefaults>(() => ({
 /** "3 reminders" — the count is what makes deleting feel safe or not. */
 function countLabel(list: ReminderListSummary): string {
     return `${list.reminder_count} ${list.reminder_count === 1 ? 'reminder' : 'reminders'}`;
+}
+
+// --- "Add an existing reminder" picker ----------------------------------
+//
+// Filing here overwrites whatever list_id a candidate already had — a
+// reminder has one list, not a set of them — so the list it opened from is
+// exactly the one left out of its own candidate pool.
+
+const pickerOpen = ref(false);
+const pickerList = ref<ReminderListSummary | null>(null);
+const pickerQuery = ref('');
+/** The row currently being filed — disables just that button, not the rest. */
+const assigningId = ref<number | null>(null);
+
+function openPicker(list: ReminderListSummary): void {
+    pickerList.value = list;
+    pickerQuery.value = '';
+    pickerOpen.value = true;
+}
+
+const pickerCandidates = computed<Reminder[]>(() => {
+    const list = pickerList.value;
+
+    if (list === null) {
+        return [];
+    }
+
+    const query = pickerQuery.value.trim().toLowerCase();
+
+    return reminders.filter(
+        (reminder) =>
+            reminder.list_id !== list.id &&
+            (query === '' || reminder.title.toLowerCase().includes(query)),
+    );
+});
+
+/** Whether the account has anything left to file at all, search aside —
+ *  what decides between "nothing to search" and "no matches". */
+const hasAnyCandidates = computed(
+    () =>
+        pickerList.value !== null &&
+        reminders.some((reminder) => reminder.list_id !== pickerList.value?.id),
+);
+
+function assignReminder(reminder: Reminder): void {
+    const list = pickerList.value;
+
+    if (list === null) {
+        return;
+    }
+
+    assigningId.value = reminder.id;
+
+    router.put(
+        ReminderListController.assign.url({
+            list: list.id,
+            reminder: reminder.id,
+        }),
+        {},
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onFinish: () => {
+                assigningId.value = null;
+            },
+        },
+    );
 }
 </script>
 
@@ -193,6 +267,15 @@ function countLabel(list: ReminderListSummary): string {
                         @click="openAddReminder(list)"
                     >
                         <BellPlus />
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        :aria-label="`Add an existing reminder to ${list.name}`"
+                        data-test="add-existing-reminder-button"
+                        @click="openPicker(list)"
+                    >
+                        <FolderInput />
                     </Button>
                     <Button
                         variant="ghost"
@@ -325,6 +408,92 @@ function countLabel(list: ReminderListSummary): string {
         :palette="palette"
         :timezone="timezone"
     />
+
+    <!-- Add an existing reminder: files it into pickerList, out of wherever
+         it was before. -->
+    <Dialog v-model:open="pickerOpen">
+        <DialogContent
+            v-if="pickerList"
+            class="flex max-h-[85svh] flex-col gap-4"
+        >
+            <DialogHeader>
+                <DialogTitle>Add to {{ pickerList.name }}</DialogTitle>
+                <DialogDescription>
+                    Picking a reminder here files it into
+                    {{ pickerList.name }}, out of wherever it was before.
+                </DialogDescription>
+            </DialogHeader>
+
+            <div v-if="hasAnyCandidates" class="relative">
+                <Search
+                    class="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden="true"
+                />
+                <Input
+                    v-model="pickerQuery"
+                    type="search"
+                    placeholder="Search reminders"
+                    class="pl-8"
+                    autocomplete="off"
+                    data-test="reminder-picker-search"
+                />
+            </div>
+
+            <ul
+                v-if="pickerCandidates.length > 0"
+                class="-mx-1 flex flex-col gap-1 overflow-y-auto px-1"
+                data-test="reminder-picker-results"
+            >
+                <li v-for="reminder in pickerCandidates" :key="reminder.id">
+                    <button
+                        type="button"
+                        class="flex w-full items-start gap-2 rounded-lg border border-transparent p-2 text-left transition-colors hover:border-input hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                        :data-test="`reminder-picker-row-${reminder.id}`"
+                        :disabled="assigningId === reminder.id"
+                        @click="assignReminder(reminder)"
+                    >
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate font-medium">
+                                {{ reminder.title }}
+                            </p>
+                            <p class="text-sm text-muted-foreground">
+                                {{ reminder.due_relative }}
+                            </p>
+                            <ListBadge :reminder="reminder" />
+                        </div>
+                        <FolderInput
+                            class="mt-1 size-4 shrink-0 text-muted-foreground"
+                            aria-hidden="true"
+                        />
+                    </button>
+                </li>
+            </ul>
+
+            <p
+                v-else-if="hasAnyCandidates"
+                class="py-6 text-center text-sm text-muted-foreground"
+            >
+                No reminders match “{{ pickerQuery }}”.
+            </p>
+
+            <p v-else class="py-6 text-center text-sm text-muted-foreground">
+                Every reminder is already in {{ pickerList.name }}, or you don't
+                have any yet.
+            </p>
+
+            <DialogFooter>
+                <DialogClose as-child>
+                    <Button
+                        variant="secondary"
+                        class="w-full sm:w-auto"
+                        data-test="reminder-picker-done-button"
+                    >
+                        Done
+                    </Button>
+                </DialogClose>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
 
     <Dialog v-model:open="deleteOpen">
         <DialogContent v-if="deleting">

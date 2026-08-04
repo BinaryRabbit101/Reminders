@@ -37,6 +37,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('lists/{list}', [ReminderListController::class, 'update'])->name('lists.update');
     Route::delete('lists/{list}', [ReminderListController::class, 'destroy'])->name('lists.destroy');
 
+    // Filing an *existing* reminder into a list, from the lists page's
+    // picker — the counterpart to un-filing, which happens by picking
+    // "No list" in the reminder's own edit sheet.
+    Route::put('lists/{list}/reminders/{reminder}', [ReminderListController::class, 'assign'])->name('lists.reminders.assign');
+
     Route::post('push/subscriptions', [PushSubscriptionController::class, 'store'])->name('push.store');
     Route::delete('push/subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push.destroy');
 });

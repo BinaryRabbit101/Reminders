@@ -183,6 +183,78 @@ class ReminderListTest extends TestCase
         $this->assertNull($reminder->refresh()->list_id);
     }
 
+    public function test_an_existing_reminder_can_be_added_to_a_list_from_the_lists_page()
+    {
+        $user = User::factory()->create();
+        $errands = ReminderList::factory()->for($user)->create(['name' => 'Errands']);
+        $groceries = ReminderList::factory()->for($user)->create(['name' => 'Groceries']);
+        $reminder = Reminder::factory()->for($user)->create(['list_id' => $errands->id]);
+
+        $this->actingAs($user)
+            ->put(route('lists.reminders.assign', [$groceries, $reminder]))
+            ->assertRedirect(route('lists.index'));
+
+        $this->assertSame($groceries->id, $reminder->refresh()->list_id);
+    }
+
+    public function test_the_lists_page_offers_only_the_users_own_pending_reminders_as_candidates()
+    {
+        $user = User::factory()->create();
+        $filed = Reminder::factory()->for($user)->create(['title' => 'Unfiled']);
+        Reminder::factory()->for($user)->create(['title' => 'Done', 'completed_at' => now()]);
+        Reminder::factory()->create(['title' => 'Not mine']);
+
+        $this->withoutVite()
+            ->actingAs($user)
+            ->get(route('lists.index'))
+            ->assertInertia(fn ($page) => $page
+                ->has('reminders', 1)
+                ->where('reminders.0.id', $filed->id)
+            );
+    }
+
+    public function test_a_user_cannot_add_a_reminder_to_someone_elses_list()
+    {
+        $intruder = User::factory()->create();
+        $reminder = Reminder::factory()->for($intruder)->create();
+        $theirs = ReminderList::factory()->create();
+
+        $this->actingAs($intruder)
+            ->put(route('lists.reminders.assign', [$theirs, $reminder]))
+            ->assertForbidden();
+
+        $this->assertNull($reminder->refresh()->list_id);
+    }
+
+    public function test_a_user_cannot_add_someone_elses_reminder_to_their_own_list()
+    {
+        $user = User::factory()->create();
+        $list = ReminderList::factory()->for($user)->create();
+        $someoneElses = Reminder::factory()->create();
+
+        $this->actingAs($user)
+            ->put(route('lists.reminders.assign', [$list, $someoneElses]))
+            ->assertForbidden();
+
+        $this->assertNull($someoneElses->refresh()->list_id);
+    }
+
+    public function test_a_household_member_cannot_add_their_partners_shared_reminder_to_their_own_list()
+    {
+        $household = Household::factory()->create();
+        $alice = User::factory()->create(['household_id' => $household->id]);
+        $bob = User::factory()->create(['household_id' => $household->id]);
+
+        $bobsList = ReminderList::factory()->for($bob)->create();
+        $alicesReminder = Reminder::factory()->for($alice)->shared()->create();
+
+        $this->actingAs($bob)
+            ->put(route('lists.reminders.assign', [$bobsList, $alicesReminder]))
+            ->assertForbidden();
+
+        $this->assertNull($alicesReminder->refresh()->list_id);
+    }
+
     public function test_a_reminder_cannot_be_filed_into_someone_elses_list()
     {
         $user = User::factory()->create();

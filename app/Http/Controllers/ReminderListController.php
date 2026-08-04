@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ReminderListRequest;
+use App\Models\Reminder;
 use App\Models\ReminderList;
 use App\Support\ListColor;
 use App\Support\ReminderPresenter;
@@ -39,6 +40,17 @@ class ReminderListController extends Controller
             // index gives it.
             'defaults' => $presenter->formDefaults($user),
             'timezone' => $user->timezone(),
+            // The "add an existing reminder" picker's candidates: the
+            // user's own reminders, soonest first. Completed ones are left
+            // out — history is not what this page is for — and so is
+            // anyone else's, the same "mine only" rule filing already
+            // follows everywhere else.
+            'reminders' => $user->reminders()
+                ->pending()
+                ->with(['user', 'list'])
+                ->orderBy('due_at')
+                ->get()
+                ->map(fn (Reminder $reminder): array => $presenter->present($reminder, $user)),
         ]);
     }
 
@@ -88,6 +100,31 @@ class ReminderListController extends Controller
         $list->delete();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('List deleted. Its reminders were kept.')]);
+
+        return $this->backToLists();
+    }
+
+    /**
+     * File an existing reminder into this list, from the lists page's
+     * picker.
+     *
+     * A reminder has one `list_id`, not a set of lists, so this simply
+     * overwrites whatever it was filed under before — including nothing at
+     * all. Both sides have to be the caller's own: the list, via the same
+     * policy `update` uses, and the reminder explicitly, since lists are
+     * personal and `ReminderPolicy::update()` alone would let a household
+     * member file their partner's *shared* reminder into an account it does
+     * not belong to.
+     */
+    public function assign(Request $request, ReminderList $list, Reminder $reminder): RedirectResponse
+    {
+        Gate::authorize('update', $list);
+
+        abort_unless($reminder->user_id === $request->user()?->id, 403);
+
+        $reminder->update(['list_id' => $list->id]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Reminder added to :list.', ['list' => $list->name])]);
 
         return $this->backToLists();
     }
