@@ -56,19 +56,29 @@ class AuthenticationTest extends DuskTestCase
             $browser->loginAs($user)
                 ->visit('/today')
                 ->assertAuthenticated()
-                ->waitFor('[data-test="sidebar-menu-button"]')
-                ->click('[data-test="sidebar-menu-button"]')
-                ->pause(500);
+                ->waitFor('[data-test="sidebar-menu-button"]');
 
-            // The dropdown occasionally doesn't open from a click that lands
-            // before Vue finishes attaching its listeners just after
-            // navigation — one retry click (after giving the first one a
-            // real chance to animate in) is cheaper than a flaky suite.
-            if ($browser->element('[data-test="logout-button"]') === null) {
+            // The dropdown occasionally eats a click that lands before Vue
+            // finishes attaching its listeners just after navigation. A
+            // single blind retry click isn't enough: if the first click DID
+            // open the menu but just slower than expected, that retry click
+            // closes it again, and no amount of extra waiting afterwards
+            // helps. Instead, retry the click itself and re-check each time,
+            // so a stray close is immediately followed by a reopen.
+            $opened = false;
+
+            for ($attempt = 1; $attempt <= 4 && ! $opened; $attempt++) {
                 $browser->click('[data-test="sidebar-menu-button"]');
+
+                try {
+                    $browser->waitFor('[data-test="logout-button"]', 2);
+                    $opened = true;
+                } catch (\Throwable) {
+                    // Not open yet after this click — try again.
+                }
             }
 
-            $browser->waitFor('[data-test="logout-button"]', 10)
+            $browser->assertVisible('[data-test="logout-button"]')
                 ->click('[data-test="logout-button"]')
                 ->waitForLocation('/')
                 ->assertGuest();
