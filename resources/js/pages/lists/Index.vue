@@ -221,7 +221,11 @@ function assignReminder(reminder: Reminder): void {
             class="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center"
             data-test="lists-empty"
         >
-            <ListPlus class="size-8 text-muted-foreground" />
+            <div
+                class="flex size-14 items-center justify-center rounded-full bg-primary/10"
+            >
+                <ListPlus class="size-7 text-primary" />
+            </div>
             <div>
                 <p class="font-medium">No lists yet</p>
                 <p class="text-sm text-muted-foreground">
@@ -239,7 +243,7 @@ function assignReminder(reminder: Reminder): void {
             <li
                 v-for="list in lists"
                 :key="list.id"
-                class="flex items-center gap-2 rounded-xl border border-sidebar-border/70 p-2 dark:border-sidebar-border"
+                class="flex items-center gap-2 rounded-xl border border-sidebar-border/70 p-2 shadow-sm transition-shadow hover:shadow-md dark:border-sidebar-border"
                 data-test="list-row"
             >
                 <span

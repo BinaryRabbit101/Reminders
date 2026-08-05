@@ -69,7 +69,11 @@ function openEdit(entry: HistoryEntry): void {
             class="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center"
             data-test="history-empty"
         >
-            <Inbox class="size-8 text-muted-foreground" />
+            <div
+                class="flex size-14 items-center justify-center rounded-full bg-primary/10"
+            >
+                <Inbox class="size-7 text-primary" />
+            </div>
             <div>
                 <p class="font-medium">Nothing sent yet</p>
                 <p class="text-sm text-muted-foreground">
@@ -94,7 +98,7 @@ function openEdit(entry: HistoryEntry): void {
                 <li
                     v-for="entry in day.entries"
                     :key="entry.id"
-                    class="rounded-xl border p-2"
+                    class="rounded-xl border p-2 shadow-sm transition-shadow hover:shadow-md"
                     :class="
                         entry.is_unread
                             ? 'border-primary/40 bg-primary/5'

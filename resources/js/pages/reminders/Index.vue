@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { Form, Head, Link, router } from '@inertiajs/vue3';
-import { BellPlus, FolderX, ListChecks, Pencil, Plus, Trash2 } from '@lucide/vue';
+import {
+    BellPlus,
+    FolderX,
+    ListChecks,
+    Pencil,
+    Plus,
+    Trash2,
+} from '@lucide/vue';
 import { computed, ref } from 'vue';
 import ReminderController from '@/actions/App/Http/Controllers/ReminderController';
 import ReminderListController from '@/actions/App/Http/Controllers/ReminderListController';
@@ -209,7 +216,11 @@ function isOverdue(reminder: Reminder): boolean {
             v-if="reminders.length === 0"
             class="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center"
         >
-            <BellPlus class="size-8 text-muted-foreground" />
+            <div
+                class="flex size-14 items-center justify-center rounded-full bg-primary/10"
+            >
+                <BellPlus class="size-7 text-primary" />
+            </div>
             <div v-if="activeList">
                 <p class="font-medium break-words">
                     Nothing in {{ activeList.name }}
@@ -236,7 +247,7 @@ function isOverdue(reminder: Reminder): boolean {
             <li
                 v-for="reminder in reminders"
                 :key="reminder.id"
-                class="flex items-start gap-1 rounded-xl border border-sidebar-border/70 p-2 dark:border-sidebar-border"
+                class="flex items-start gap-1 rounded-xl border border-sidebar-border/70 p-2 shadow-sm transition-shadow hover:shadow-md dark:border-sidebar-border"
                 :class="{ 'opacity-60': reminder.is_completed }"
             >
                 <ReminderCompleteToggle :reminder="reminder" />

@@ -56,9 +56,9 @@ const handleEnable = async () => {
     <Card v-if="visible" class="relative">
         <CardContent class="flex flex-wrap items-center gap-4 py-4">
             <div
-                class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted"
+                class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10"
             >
-                <Bell class="size-5 text-muted-foreground" />
+                <Bell class="size-5 text-primary" />
             </div>
 
             <div class="min-w-48 flex-1">

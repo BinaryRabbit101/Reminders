@@ -103,7 +103,11 @@ function openEdit(reminder: Reminder): void {
             class="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center"
             data-test="today-all-clear"
         >
-            <PartyPopper class="size-8 text-muted-foreground" />
+            <div
+                class="flex size-14 items-center justify-center rounded-full bg-primary/10"
+            >
+                <PartyPopper class="size-7 text-primary" />
+            </div>
             <div>
                 <p class="font-medium">All clear 🎉</p>
                 <p class="text-sm text-muted-foreground">
@@ -139,7 +143,7 @@ function openEdit(reminder: Reminder): void {
                     <li
                         v-for="reminder in board.overdue"
                         :key="reminder.id"
-                        class="flex items-start gap-1 rounded-xl border border-destructive/40 bg-destructive/5 p-2"
+                        class="flex items-start gap-1 rounded-xl border border-destructive/40 bg-destructive/5 p-2 shadow-sm transition-shadow hover:shadow-md"
                     >
                         <ReminderCompleteToggle :reminder="reminder" />
 
@@ -184,9 +188,9 @@ function openEdit(reminder: Reminder): void {
             >
                 <h2
                     id="section-today-heading"
-                    class="flex items-center gap-2 text-sm font-semibold"
+                    class="flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-400"
                 >
-                    <Sun class="size-4 shrink-0 text-muted-foreground" />
+                    <Sun class="size-4 shrink-0" />
                     Later today
                     <span class="font-normal text-muted-foreground">
                         {{ board.today.length }}
@@ -197,7 +201,7 @@ function openEdit(reminder: Reminder): void {
                     <li
                         v-for="reminder in board.today"
                         :key="reminder.id"
-                        class="flex items-start gap-1 rounded-xl border border-sidebar-border/70 p-2 dark:border-sidebar-border"
+                        class="flex items-start gap-1 rounded-xl border border-sidebar-border/70 p-2 shadow-sm transition-shadow hover:shadow-md dark:border-sidebar-border"
                     >
                         <ReminderCompleteToggle :reminder="reminder" />
 
@@ -252,11 +256,9 @@ function openEdit(reminder: Reminder): void {
             >
                 <h2
                     id="section-upcoming-heading"
-                    class="flex items-center gap-2 text-sm font-semibold"
+                    class="flex items-center gap-2 text-sm font-semibold text-teal-600 dark:text-teal-400"
                 >
-                    <CalendarClock
-                        class="size-4 shrink-0 text-muted-foreground"
-                    />
+                    <CalendarClock class="size-4 shrink-0" />
                     Upcoming
                     <span class="font-normal text-muted-foreground">
                         next {{ board.upcoming_days }} days
@@ -278,7 +280,7 @@ function openEdit(reminder: Reminder): void {
                         <li
                             v-for="reminder in day.reminders"
                             :key="reminder.id"
-                            class="flex items-start gap-1 rounded-xl border border-sidebar-border/70 p-2 dark:border-sidebar-border"
+                            class="flex items-start gap-1 rounded-xl border border-sidebar-border/70 p-2 shadow-sm transition-shadow hover:shadow-md dark:border-sidebar-border"
                         >
                             <ReminderCompleteToggle :reminder="reminder" />
 
