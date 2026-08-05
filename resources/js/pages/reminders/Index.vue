@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Form, Head, Link } from '@inertiajs/vue3';
-import { BellPlus, ListChecks, Pencil, Plus, Trash2 } from '@lucide/vue';
+import { Form, Head, Link, router } from '@inertiajs/vue3';
+import { BellPlus, FolderX, ListChecks, Pencil, Plus, Trash2 } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import ReminderController from '@/actions/App/Http/Controllers/ReminderController';
+import ReminderListController from '@/actions/App/Http/Controllers/ReminderListController';
 import ListBadge from '@/components/ListBadge.vue';
 import RecurrenceBadge from '@/components/RecurrenceBadge.vue';
 import ReminderCompleteToggle from '@/components/ReminderCompleteToggle.vue';
@@ -102,6 +103,27 @@ function chipClass(listId: number | null): string {
     return active_list_id === listId
         ? `${base} border-primary bg-primary text-primary-foreground`
         : `${base} border-input text-muted-foreground hover:bg-accent`;
+}
+
+/** The row whose list removal is in flight — disables just that button. */
+const removingListFrom = ref<number | null>(null);
+
+/**
+ * Clear the viewer's own filing of a reminder — the owner's other way to do
+ * this is picking "No list" in the edit sheet, but a household member filing
+ * someone else's shared reminder never sees that select at all, so this is
+ * the only path available to them.
+ */
+function removeFromList(reminder: Reminder): void {
+    removingListFrom.value = reminder.id;
+
+    router.delete(ReminderListController.unassign.url(reminder.id), {
+        preserveScroll: true,
+        preserveState: true,
+        onFinish: () => {
+            removingListFrom.value = null;
+        },
+    });
 }
 
 function isOverdue(reminder: Reminder): boolean {
@@ -245,6 +267,17 @@ function isOverdue(reminder: Reminder): boolean {
                         {{ reminder.notes }}
                     </p>
                     <ListBadge :reminder="reminder" />
+                    <button
+                        v-if="reminder.list"
+                        type="button"
+                        class="me-1 mt-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                        :aria-label="`Remove ${reminder.title} from ${reminder.list.name}`"
+                        :disabled="removingListFrom === reminder.id"
+                        data-test="remove-from-list-button"
+                        @click="removeFromList(reminder)"
+                    >
+                        <FolderX class="size-3" aria-hidden="true" />
+                    </button>
                     <SnoozedBadge :reminder="reminder" />
                     <SharedReminderBadge :reminder="reminder" />
                     <RecurrenceBadge :reminder="reminder" />

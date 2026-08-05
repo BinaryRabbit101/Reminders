@@ -120,7 +120,13 @@ final class TodayBoard
     {
         return Reminder::query()
             ->visibleTo($user)
-            ->with(['user', 'list'])
+            ->with([
+                'user',
+                'list',
+                // Scoped to the viewer so the presenter's listFor() can read
+                // this user's own filing state with no extra query per row.
+                'filings' => fn ($query) => $query->where('user_id', $user->id)->with('list'),
+            ])
             ->pending()
             ->whereRaw(Reminder::EFFECTIVE_DUE_AT.' <= ?', [
                 $endOfWindow->utc()->format('Y-m-d H:i:s'),

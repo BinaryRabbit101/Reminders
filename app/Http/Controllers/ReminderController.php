@@ -34,8 +34,22 @@ class ReminderController extends Controller
 
         $reminders = Reminder::query()
             ->visibleTo($user)
-            ->with(['user', 'list'])
-            ->when($activeList !== null, fn ($query) => $query->where('list_id', $activeList?->id))
+            ->with([
+                'user',
+                'list',
+                'filings' => fn ($query) => $query->where('user_id', $user->id)->with('list'),
+            ])
+            // Matches either half of the viewer's own filing: their own
+            // reminder filed under the list directly, or a shared one they
+            // co-filed via ReminderListFiling. Both conditions are nested in
+            // their own group before the `orWhereHas` — appending it at the
+            // top level would OR against visibleTo()'s own grouping instead
+            // of narrowing within it, which would leak reminders the viewer
+            // otherwise couldn't see.
+            ->when($activeList !== null, fn ($query) => $query->where(fn ($query) => $query
+                ->where(fn ($query) => $query->where('user_id', $user->id)->where('list_id', $activeList->id))
+                ->orWhereHas('filings', fn ($query) => $query->where('user_id', $user->id)->where('list_id', $activeList->id))
+            ))
             ->orderBy('due_at')
             ->get()
             ->map(fn (Reminder $reminder): array => $presenter->present($reminder, $user));
@@ -74,7 +88,21 @@ class ReminderController extends Controller
     {
         Gate::authorize('update', $reminder);
 
-        $reminder->update($request->reminderAttributes());
+        // A household member's filing only makes sense while they can still
+        // see the reminder — un-sharing takes that away, so a shared-to-
+        // private transition clears whatever co-filings existed rather than
+        // leaving a stranded row that keeps inflating that list's count. The
+        // new value is read off the request attributes, not the model after
+        // `update()`, so the comparison is against what's actually about to
+        // be written rather than in-memory state.
+        $wasShared = $reminder->is_shared;
+        $attributes = $request->reminderAttributes();
+
+        $reminder->update($attributes);
+
+        if ($wasShared && ! $attributes['is_shared']) {
+            $reminder->filings()->delete();
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Reminder updated.')]);
 

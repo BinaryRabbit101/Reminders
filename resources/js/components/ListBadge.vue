@@ -2,11 +2,10 @@
 import type { Reminder } from '@/types';
 
 /**
- * The coloured dot and name of the list a reminder is filed under.
- *
- * Renders nothing at all when there is no list — which includes every shared
- * reminder somebody else owns, because lists are personal and the server
- * simply does not send one for those rows.
+ * The coloured dot and name of the list a reminder is filed under — always
+ * the *viewer's own* filing (see the `list` field on the `Reminder` type),
+ * so a shared reminder can show a different list, or none, to each household
+ * member. Renders nothing at all when the viewer hasn't filed it themselves.
  *
  * The swatch is an inline `background-color` from a server-sent hex rather
  * than a Tailwind class: Tailwind 4 generates utilities by scanning source

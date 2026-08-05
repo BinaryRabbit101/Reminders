@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Household;
 use App\Models\Reminder;
 use App\Models\ReminderList;
+use App\Models\ReminderListFiling;
 use App\Models\User;
 use App\Support\ListColor;
 use App\Support\WidgetFeed;
@@ -468,10 +469,11 @@ class WidgetFeedTest extends TestCase
             ->assertJsonPath('today.0.list_color', '#10b981');
     }
 
-    public function test_a_shared_reminders_list_colour_is_not_shown_to_the_partner()
+    public function test_a_shared_reminders_list_colour_reflects_the_viewers_own_filing_not_the_owners()
     {
-        // Lists are personal (lists close-out): the partner sees the reminder
-        // but none of the owner's filing around it.
+        // Lists are personal: the owner's own filing never shows on the
+        // partner's widget, but the partner's own independent filing of the
+        // same shared reminder does.
         Carbon::setTestNow(Carbon::parse('2026-08-03 12:00', 'America/Chicago'));
 
         $partner = User::factory()->create();
@@ -479,14 +481,24 @@ class WidgetFeedTest extends TestCase
 
         $this->linkHousehold($partner, $user);
 
-        $list = ReminderList::factory()->for($partner)->colored(ListColor::Emerald)->create();
-
-        $this->remind($partner, '2026-08-03 15:00', 'Shared errand', shared: true, list: $list);
+        $ownersList = ReminderList::factory()->for($partner)->colored(ListColor::Emerald)->create();
+        $reminder = $this->remind($partner, '2026-08-03 15:00', 'Shared errand', shared: true, list: $ownersList);
 
         $this->getJson($this->feedUrl($user))
             ->assertOk()
             ->assertJsonPath('today.0.title', 'Shared errand')
             ->assertJsonPath('today.0.list_color', null);
+
+        $usersOwnList = ReminderList::factory()->for($user)->colored(ListColor::Sky)->create();
+        ReminderListFiling::create([
+            'reminder_id' => $reminder->id,
+            'user_id' => $user->id,
+            'list_id' => $usersOwnList->id,
+        ]);
+
+        $this->getJson($this->feedUrl($user))
+            ->assertOk()
+            ->assertJsonPath('today.0.list_color', '#0ea5e9');
     }
 
     public function test_a_row_without_a_list_carries_a_null_colour()

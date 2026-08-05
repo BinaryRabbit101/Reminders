@@ -186,7 +186,7 @@ final class WidgetFeed
     {
         return Reminder::query()
             ->visibleTo($user)
-            ->with('list')
+            ->with(['list', 'filings' => fn ($query) => $query->where('user_id', $user->id)->with('list')])
             ->pending()
             ->whereRaw(Reminder::EFFECTIVE_DUE_AT.' <= ?', [
                 $endOfToday->copy()->utc()->format('Y-m-d H:i:s'),
@@ -212,7 +212,7 @@ final class WidgetFeed
     {
         return Reminder::query()
             ->visibleTo($user)
-            ->with('list')
+            ->with(['list', 'filings' => fn ($query) => $query->where('user_id', $user->id)->with('list')])
             ->pending()
             ->whereRaw(Reminder::EFFECTIVE_DUE_AT.' > ?', [
                 $endOfToday->copy()->utc()->format('Y-m-d H:i:s'),
@@ -225,18 +225,16 @@ final class WidgetFeed
     /**
      * The swatch a row draws, or null.
      *
-     * Lists are personal (lists close-out): a shared reminder shows its list
-     * only to its owner, because the list *is* the owner's and one account's
-     * filing has no business appearing on another's home screen. The widget
-     * simply draws the dot it is given, so the rule has to be enforced here.
+     * The viewer's own filing, same as the app: the owner's own list, or a
+     * household member's independent co-filing of a shared reminder — see
+     * {@see Reminder::listFor()}. Lists themselves stay
+     * personal; what changed is that a co-filer now has one to draw here at
+     * all, where previously this always returned null for anyone but the
+     * owner.
      */
     private function listColor(Reminder $reminder, User $viewer): ?string
     {
-        if ($reminder->user_id !== $viewer->id || $reminder->list === null) {
-            return null;
-        }
-
-        return $reminder->list->paletteColor()->hex();
+        return $reminder->listFor($viewer)?->paletteColor()->hex();
     }
 
     /**

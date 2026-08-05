@@ -30,17 +30,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('reminders/{reminder}/snooze', [ReminderActionController::class, 'snooze'])->name('reminders.snooze');
     Route::post('reminders/{reminder}/restore', [ReminderActionController::class, 'restore'])->name('reminders.restore');
 
-    // Lists are personal, so every route here is scoped to the owner: the
-    // index reads `$user->lists()` and the rest go through ReminderListPolicy.
+    // Managing a list itself is always owner-only: the index reads
+    // `$user->lists()` and the rest go through ReminderListPolicy. Filing a
+    // *reminder* into one is looser — see assign()/unassign() below.
     Route::get('lists', [ReminderListController::class, 'index'])->name('lists.index');
     Route::post('lists', [ReminderListController::class, 'store'])->name('lists.store');
     Route::put('lists/{list}', [ReminderListController::class, 'update'])->name('lists.update');
     Route::delete('lists/{list}', [ReminderListController::class, 'destroy'])->name('lists.destroy');
 
     // Filing an *existing* reminder into a list, from the lists page's
-    // picker — the counterpart to un-filing, which happens by picking
-    // "No list" in the reminder's own edit sheet.
+    // picker — open to anyone the reminder is visible to, not just its
+    // owner, so a shared reminder can be filed independently by either
+    // household member.
     Route::put('lists/{list}/reminders/{reminder}', [ReminderListController::class, 'assign'])->name('lists.reminders.assign');
+    // Un-filing: the owner's other route is picking "No list" in the
+    // reminder's own edit sheet, but that select is owner-only, so this is
+    // the only way a co-filer can clear their own filing.
+    Route::delete('reminders/{reminder}/list', [ReminderListController::class, 'unassign'])->name('reminders.list.unassign');
 
     Route::post('push/subscriptions', [PushSubscriptionController::class, 'store'])->name('push.store');
     Route::delete('push/subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push.destroy');

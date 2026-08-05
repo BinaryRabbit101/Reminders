@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Policies\ReminderListPolicy;
 use App\Support\ListColor;
 use App\Support\ReminderPresenter;
 use Database\Factories\ReminderListFactory;
@@ -16,12 +17,14 @@ use Illuminate\Support\Carbon;
  * A list is one account's way of filing its own reminders — "Errands",
  * "Work", "Meds".
  *
- * It is deliberately **personal, not shared**. A household member never sees
- * the other's lists, cannot file a reminder into one, and cannot filter by
- * one; a shared reminder simply shows no list badge to anyone but its owner
- * (see {@see ReminderPresenter::present()}). Lists are an
- * organisational tool, and one person's filing system leaking into another
- * account would be a surprise, not a feature.
+ * It is deliberately **personal**: a household member never sees, renames, or
+ * deletes another account's lists — {@see ReminderListPolicy}
+ * is owner-only, full stop. Filing a *reminder* into one is a narrower
+ * question, though: a household member can file a reminder that is shared
+ * with them into one of their own lists, independently of how (or whether)
+ * the owner filed it — see {@see Reminder::listFor()} and
+ * {@see ReminderPresenter::present()}. What never happens is one account's
+ * list appearing to, or being touched by, another.
  *
  * The class is `ReminderList` rather than `List` because `list` is a reserved
  * word in PHP and cannot name a class; the table is still `lists`.
@@ -34,6 +37,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  * @property-read User $user
  * @property-read int|null $reminders_count
+ * @property-read int|null $filings_count
  */
 #[Fillable(['user_id', 'name', 'color'])]
 class ReminderList extends Model
@@ -59,13 +63,25 @@ class ReminderList extends Model
     }
 
     /**
-     * The reminders filed under this list.
+     * The reminders this list's own owner filed under it.
      *
      * @return HasMany<Reminder, $this>
      */
     public function reminders(): HasMany
     {
         return $this->hasMany(Reminder::class, 'list_id');
+    }
+
+    /**
+     * Other household members' filings of a *shared* reminder into this
+     * list — the co-filer half of this list's contents, on top of
+     * {@see reminders()}.
+     *
+     * @return HasMany<ReminderListFiling, $this>
+     */
+    public function filings(): HasMany
+    {
+        return $this->hasMany(ReminderListFiling::class, 'list_id');
     }
 
     /**

@@ -129,11 +129,15 @@ final class ReminderPresenter
     {
         $local = $this->toLocal($reminder->due_at);
         $isMine = $viewer === null || $viewer->id === $reminder->user_id;
+        // Null only when nobody in particular is looking (the owner's own
+        // point of view) — every other caller passes the actual viewer.
+        $viewerForList = $viewer ?? $reminder->user;
         $rule = $reminder->recurrenceRule();
         // A snooze that has already expired is not a snooze any more, it is
         // an overdue reminder — so only a future one gets a badge.
         $snoozedUntil = $reminder->snoozed_until;
         $activeSnooze = $snoozedUntil?->isFuture() === true ? $snoozedUntil : null;
+        $list = $reminder->listFor($viewerForList);
 
         return [
             'id' => $reminder->id,
@@ -159,19 +163,17 @@ final class ReminderPresenter
             // Only somebody else's reminder needs a name on it; the client
             // renders the string, it never assembles one.
             'owner_label' => $isMine ? null : 'by '.$this->firstName($reminder->user->name),
-            // Lists are personal, so the badge is too: a shared reminder shows
-            // its list only to the owner, because the list *is* the owner's
-            // and one account's filing system has no business appearing in
-            // another's. The other household member sees the same reminder
-            // with no list at all — nothing about it is hidden except a label
-            // that would have been meaningless to them anyway.
-            'list' => $isMine && $reminder->list !== null
-                ? $this->listPayload($reminder->list)
-                : null,
-            // Same rule for the edit sheet's select: a non-owner is not shown
-            // the value, and ReminderRequest correspondingly refuses to write
-            // one, so editing a shared reminder cannot clear the owner's list.
-            'list_id' => $isMine ? $reminder->list_id : null,
+            // Every viewer's *own* filing, independent of anyone else's: the
+            // owner reads `list_id` directly, a household member reads their
+            // own ReminderListFiling row — see Reminder::listFor(). Lists
+            // themselves stay personal (nobody sees another account's list
+            // metadata), but a shared reminder can appear in each viewer's
+            // own filing system without the two ever touching.
+            'list' => $list === null ? null : $this->listPayload($list),
+            // Same source as `list` above — this is what the edit sheet's
+            // select reopens on for the owner, and what ReminderRequest
+            // refuses to let a non-owner overwrite either way.
+            'list_id' => $reminder->listIdFor($viewerForList),
             'is_recurring' => $rule !== null,
             // "Every 2 weeks · Mon, Wed" is assembled here for the same
             // reason dates are: the client renders strings, it never builds
@@ -251,11 +253,15 @@ final class ReminderPresenter
     public function lists(User $user): array
     {
         return array_values($user->lists()
-            ->withCount('reminders')
+            // Two sources make up a list's contents: reminders its owner
+            // filed directly (`reminders`) and shared reminders a household
+            // member independently co-filed into it (`filings`) — the count
+            // shown is the sum of both.
+            ->withCount(['reminders', 'filings'])
             ->get()
             ->map(fn (ReminderList $list): array => [
                 ...$this->listPayload($list),
-                'reminder_count' => (int) ($list->reminders_count ?? 0),
+                'reminder_count' => (int) ($list->reminders_count ?? 0) + (int) ($list->filings_count ?? 0),
             ])
             ->all());
     }

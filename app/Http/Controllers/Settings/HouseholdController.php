@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\HouseholdJoinRequest;
 use App\Http\Requests\Settings\HouseholdStoreRequest;
 use App\Models\Household;
+use App\Models\ReminderListFiling;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,10 +17,11 @@ use Inertia\Response;
  * Linking two accounts into one household.
  *
  * Membership is the only thing these actions write. Nothing is copied on the
- * way in and nothing is rewritten on the way out: reminder visibility is
- * derived from *current* membership, so joining reveals the other member's
- * shared reminders and leaving hides them again, with no data migration
- * either way.
+ * way in: reminder visibility is derived from *current* membership, so
+ * joining reveals the other member's shared reminders with no data migration.
+ * Leaving is not quite as inert — {@see move()} clears any list filings that
+ * membership change strands, since a filing only means something while the
+ * filer can still see the reminder it's on.
  */
 class HouseholdController extends Controller
 {
@@ -108,9 +110,21 @@ class HouseholdController extends Controller
      *
      * `household_id` is deliberately not fillable — membership only ever
      * changes through these four actions.
+     *
+     * A list filing only makes sense while the filer can still see the
+     * reminder it's on, and a household change can strand it on either side:
+     * this user's own filings of reminders other members shared with them,
+     * and other members' filings of reminders *this* user owns and shared.
+     * Both are cleared before the move — a no-op on a fresh join, since
+     * there is nothing to clean up yet.
      */
     private function move(User $user, ?int $householdId): void
     {
+        ReminderListFiling::where('user_id', $user->id)->delete();
+        ReminderListFiling::whereHas('reminder', fn ($query) => $query->where('user_id', $user->id))
+            ->where('user_id', '!=', $user->id)
+            ->delete();
+
         $user->forceFill(['household_id' => $householdId])->save();
     }
 

@@ -283,7 +283,11 @@ final class NotificationHistory
 
         $presented = [];
 
-        foreach (Reminder::query()->visibleTo($user)->with(['user', 'list'])->whereKey($ids)->get() as $reminder) {
+        foreach (Reminder::query()->visibleTo($user)->with([
+            'user',
+            'list',
+            'filings' => fn ($query) => $query->where('user_id', $user->id)->with('list'),
+        ])->whereKey($ids)->get() as $reminder) {
             $presented[$reminder->id] = $presenter->present($reminder, $user);
         }
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Controllers\ReminderListController;
 use App\Models\Reminder;
 use App\Models\User;
 use App\Support\RecurrenceRule;
@@ -168,12 +169,17 @@ class ReminderRequest extends FormRequest
     /**
      * The list column — but only when the poster owns the reminder.
      *
-     * A list belongs to one account (lists are personal), so a household
-     * member editing a *shared* reminder is never shown the owner's list and
-     * never posts one back. Writing `list_id => null` in that case would
-     * silently un-file the owner's reminder every time their partner edited
-     * it, so the key is omitted from the update altogether and the column
-     * keeps whatever the owner put there.
+     * This is the *owner's* filing specifically (`reminders.list_id`), edited
+     * only from the reminder form. A household member editing a *shared*
+     * reminder is never shown the owner's list and never posts one back here
+     * — writing `list_id => null` in that case would silently un-file the
+     * owner's reminder every time their partner edited it, so the key is
+     * omitted from the update altogether and the column keeps whatever the
+     * owner put there. A household member files their *own* copy of a shared
+     * reminder into their *own* list through a separate mechanism entirely
+     * ({@see Reminder::filings()}, written by
+     * {@see ReminderListController::assign()}), not
+     * through this form or this column.
      *
      * Creating is always "mine": there is no reminder on the route yet.
      *

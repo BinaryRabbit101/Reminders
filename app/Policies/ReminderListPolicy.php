@@ -2,16 +2,20 @@
 
 namespace App\Policies;
 
+use App\Http\Controllers\ReminderListController;
 use App\Models\ReminderList;
 use App\Models\User;
 
 /**
- * Lists are owner-only, full stop.
+ * Managing a list itself — reading its settings, renaming it, deleting it —
+ * is owner-only, full stop. This is the one place the household rule
+ * deliberately does not apply: a list is how one person organises their own
+ * work, so it never crosses accounts for these actions.
  *
- * This is the one place the household rule deliberately does *not* apply.
- * A reminder can be shared because it is a job two people might do; a list is
- * how one person files their own work, so it never crosses accounts — not to
- * be read, not to be renamed, not to be assigned to.
+ * Filing a *reminder* into a list is a different question and is not decided
+ * here — {@see ReminderListController::assign()} allows
+ * it for anyone the reminder is visible to, own list or not, because that's a
+ * fact about the reminder's visibility rather than the list's ownership.
  */
 class ReminderListPolicy
 {

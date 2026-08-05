@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Household;
 use App\Models\Reminder;
 use App\Models\ReminderList;
+use App\Models\ReminderListFiling;
 use App\Models\User;
 use App\Notifications\ReminderDueNotification;
 use App\Support\ListColor;
@@ -52,6 +53,28 @@ class ReminderListTest extends TestCase
                 ->has('palette', count(ListColor::cases()))
                 ->etc()
             );
+    }
+
+    public function test_a_lists_reminder_count_includes_reminders_co_filed_by_the_owner_via_a_shared_reminder()
+    {
+        $household = Household::factory()->create();
+        $bob = User::factory()->create(['household_id' => $household->id]);
+        $alice = User::factory()->create(['household_id' => $household->id]);
+
+        $bobsList = ReminderList::factory()->for($bob)->create(['name' => 'Chores']);
+        Reminder::factory()->for($bob)->create(['list_id' => $bobsList->id]);
+        $sharedReminder = Reminder::factory()->for($alice)->shared()->create();
+
+        ReminderListFiling::create([
+            'reminder_id' => $sharedReminder->id,
+            'user_id' => $bob->id,
+            'list_id' => $bobsList->id,
+        ]);
+
+        $this->withoutVite()
+            ->actingAs($bob)
+            ->get(route('lists.index'))
+            ->assertInertia(fn ($page) => $page->where('lists.0.reminder_count', 2));
     }
 
     public function test_a_user_can_create_a_list()
@@ -197,19 +220,25 @@ class ReminderListTest extends TestCase
         $this->assertSame($groceries->id, $reminder->refresh()->list_id);
     }
 
-    public function test_the_lists_page_offers_only_the_users_own_pending_reminders_as_candidates()
+    public function test_the_lists_page_offers_the_users_own_and_shared_pending_reminders_as_candidates()
     {
-        $user = User::factory()->create();
-        $filed = Reminder::factory()->for($user)->create(['title' => 'Unfiled']);
+        $household = Household::factory()->create();
+        $user = User::factory()->create(['household_id' => $household->id]);
+        $partner = User::factory()->create(['household_id' => $household->id]);
+
+        $mine = Reminder::factory()->for($user)->dueLocal('2026-08-10 09:00')->create(['title' => 'Unfiled']);
         Reminder::factory()->for($user)->create(['title' => 'Done', 'completed_at' => now()]);
-        Reminder::factory()->create(['title' => 'Not mine']);
+        $sharedWithMe = Reminder::factory()->for($partner)->shared()->dueLocal('2026-08-10 10:00')->create(['title' => 'Shared with me']);
+        Reminder::factory()->for($partner)->create(['title' => 'Private, not mine']);
+        Reminder::factory()->create(['title' => 'Unrelated user']);
 
         $this->withoutVite()
             ->actingAs($user)
             ->get(route('lists.index'))
             ->assertInertia(fn ($page) => $page
-                ->has('reminders', 1)
-                ->where('reminders.0.id', $filed->id)
+                ->has('reminders', 2)
+                ->where('reminders.0.id', $mine->id)
+                ->where('reminders.1.id', $sharedWithMe->id)
             );
     }
 
@@ -239,20 +268,151 @@ class ReminderListTest extends TestCase
         $this->assertNull($someoneElses->refresh()->list_id);
     }
 
-    public function test_a_household_member_cannot_add_their_partners_shared_reminder_to_their_own_list()
+    public function test_a_household_member_can_independently_file_a_shared_reminder_into_their_own_list()
+    {
+        $household = Household::factory()->create();
+        $alice = User::factory()->create(['household_id' => $household->id]);
+        $bob = User::factory()->create(['household_id' => $household->id]);
+
+        $alicesList = ReminderList::factory()->for($alice)->create(['name' => "Alice's"]);
+        $bobsList = ReminderList::factory()->for($bob)->create(['name' => "Bob's"]);
+        $sharedReminder = Reminder::factory()->for($alice)->shared()->create(['list_id' => $alicesList->id]);
+
+        $this->actingAs($bob)
+            ->put(route('lists.reminders.assign', [$bobsList, $sharedReminder]))
+            ->assertRedirect(route('lists.index'));
+
+        // Bob's filing exists as his own row...
+        $this->assertDatabaseHas('reminder_list_filings', [
+            'reminder_id' => $sharedReminder->id,
+            'user_id' => $bob->id,
+            'list_id' => $bobsList->id,
+        ]);
+
+        // ...and never touched Alice's own filing of the same reminder.
+        $this->assertSame($alicesList->id, $sharedReminder->refresh()->list_id);
+    }
+
+    public function test_a_user_cannot_file_someone_elses_unshared_reminder_into_their_own_list()
     {
         $household = Household::factory()->create();
         $alice = User::factory()->create(['household_id' => $household->id]);
         $bob = User::factory()->create(['household_id' => $household->id]);
 
         $bobsList = ReminderList::factory()->for($bob)->create();
-        $alicesReminder = Reminder::factory()->for($alice)->shared()->create();
+        $alicesPrivateReminder = Reminder::factory()->for($alice)->create();
 
         $this->actingAs($bob)
-            ->put(route('lists.reminders.assign', [$bobsList, $alicesReminder]))
+            ->put(route('lists.reminders.assign', [$bobsList, $alicesPrivateReminder]))
             ->assertForbidden();
 
-        $this->assertNull($alicesReminder->refresh()->list_id);
+        $this->assertNull($alicesPrivateReminder->refresh()->list_id);
+        $this->assertDatabaseCount('reminder_list_filings', 0);
+    }
+
+    public function test_a_household_member_can_unfile_their_own_filing_of_a_shared_reminder()
+    {
+        $household = Household::factory()->create();
+        $alice = User::factory()->create(['household_id' => $household->id]);
+        $bob = User::factory()->create(['household_id' => $household->id]);
+
+        $alicesList = ReminderList::factory()->for($alice)->create();
+        $bobsList = ReminderList::factory()->for($bob)->create();
+        $sharedReminder = Reminder::factory()->for($alice)->shared()->create(['list_id' => $alicesList->id]);
+
+        ReminderListFiling::create([
+            'reminder_id' => $sharedReminder->id,
+            'user_id' => $bob->id,
+            'list_id' => $bobsList->id,
+        ]);
+
+        $this->actingAs($bob)
+            ->delete(route('reminders.list.unassign', $sharedReminder))
+            ->assertRedirect(route('lists.index'));
+
+        $this->assertDatabaseCount('reminder_list_filings', 0);
+        // Alice's own filing survives Bob unfiling his.
+        $this->assertSame($alicesList->id, $sharedReminder->refresh()->list_id);
+    }
+
+    public function test_the_owner_can_unfile_their_own_reminder_via_the_unassign_route()
+    {
+        $user = User::factory()->create();
+        $list = ReminderList::factory()->for($user)->create();
+        $reminder = Reminder::factory()->for($user)->create(['list_id' => $list->id]);
+
+        $this->actingAs($user)
+            ->delete(route('reminders.list.unassign', $reminder))
+            ->assertRedirect(route('lists.index'));
+
+        $this->assertNull($reminder->refresh()->list_id);
+    }
+
+    public function test_unfiling_someone_elses_unshared_reminder_is_forbidden()
+    {
+        $intruder = User::factory()->create();
+        $reminder = Reminder::factory()->create();
+
+        $this->actingAs($intruder)
+            ->delete(route('reminders.list.unassign', $reminder))
+            ->assertForbidden();
+    }
+
+    public function test_un_sharing_a_reminder_deletes_its_filings()
+    {
+        $household = Household::factory()->create();
+        $alice = User::factory()->create(['household_id' => $household->id]);
+        $bob = User::factory()->create(['household_id' => $household->id]);
+
+        $bobsList = ReminderList::factory()->for($bob)->create();
+        $sharedReminder = Reminder::factory()->for($alice)->shared()->create();
+
+        ReminderListFiling::create([
+            'reminder_id' => $sharedReminder->id,
+            'user_id' => $bob->id,
+            'list_id' => $bobsList->id,
+        ]);
+
+        $this->actingAs($alice)->put(route('reminders.update', $sharedReminder), [
+            'title' => $sharedReminder->title,
+            'due_date' => '2026-08-10',
+            'due_time' => '09:00',
+            // 'is_shared' omitted: an unchecked checkbox posts nothing.
+        ])->assertSessionHasNoErrors();
+
+        $this->assertFalse($sharedReminder->refresh()->is_shared);
+        $this->assertDatabaseCount('reminder_list_filings', 0);
+    }
+
+    public function test_leaving_a_household_clears_filings_on_both_sides()
+    {
+        $household = Household::factory()->create();
+        $alice = User::factory()->create(['household_id' => $household->id]);
+        $bob = User::factory()->create(['household_id' => $household->id]);
+
+        $alicesList = ReminderList::factory()->for($alice)->create();
+        $bobsList = ReminderList::factory()->for($bob)->create();
+
+        // Bob co-filed one of Alice's shared reminders...
+        $alicesShared = Reminder::factory()->for($alice)->shared()->create();
+        ReminderListFiling::create([
+            'reminder_id' => $alicesShared->id,
+            'user_id' => $bob->id,
+            'list_id' => $bobsList->id,
+        ]);
+
+        // ...and Alice co-filed one of Bob's.
+        $bobsShared = Reminder::factory()->for($bob)->shared()->create();
+        ReminderListFiling::create([
+            'reminder_id' => $bobsShared->id,
+            'user_id' => $alice->id,
+            'list_id' => $alicesList->id,
+        ]);
+
+        $this->actingAs($bob)->delete(route('household.leave'))
+            ->assertRedirect(route('household.edit'));
+
+        $this->assertDatabaseCount('reminder_list_filings', 0);
     }
 
     public function test_a_reminder_cannot_be_filed_into_someone_elses_list()
@@ -287,6 +447,32 @@ class ReminderListTest extends TestCase
                 ->has('lists', 1)
                 ->has('reminders', 1)
                 ->where('reminders.0.id', $filed->id)
+            );
+    }
+
+    public function test_the_reminders_index_list_filter_includes_a_co_filed_shared_reminder()
+    {
+        $household = Household::factory()->create();
+        $bob = User::factory()->create(['household_id' => $household->id]);
+        $alice = User::factory()->create(['household_id' => $household->id]);
+
+        $bobsList = ReminderList::factory()->for($bob)->create(['name' => 'Chores']);
+        $sharedReminder = Reminder::factory()->for($alice)->shared()->create(['title' => 'Shared']);
+        Reminder::factory()->for($bob)->create(['title' => 'Unrelated']);
+
+        ReminderListFiling::create([
+            'reminder_id' => $sharedReminder->id,
+            'user_id' => $bob->id,
+            'list_id' => $bobsList->id,
+        ]);
+
+        $this->actingAs($bob)
+            ->get(route('reminders.index', ['list' => $bobsList->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('active_list_id', $bobsList->id)
+                ->has('reminders', 1)
+                ->where('reminders.0.id', $sharedReminder->id)
             );
     }
 
@@ -338,14 +524,14 @@ class ReminderListTest extends TestCase
             );
     }
 
-    public function test_a_household_member_never_sees_the_owners_list_on_a_shared_reminder()
+    public function test_a_household_member_sees_no_list_on_a_shared_reminder_until_they_file_it_themselves()
     {
         $household = Household::factory()->create();
         $alice = User::factory()->create(['household_id' => $household->id]);
         $bob = User::factory()->create(['household_id' => $household->id]);
 
         $list = ReminderList::factory()->for($alice)->create(['name' => 'Errands']);
-        Reminder::factory()->for($alice)->shared()->create(['list_id' => $list->id]);
+        $reminder = Reminder::factory()->for($alice)->shared()->create(['list_id' => $list->id]);
 
         // Alice files it and sees the badge...
         $this->actingAs($alice)
@@ -353,7 +539,7 @@ class ReminderListTest extends TestCase
             ->assertInertia(fn ($page) => $page->where('reminders.0.list.name', 'Errands'));
 
         // ...Bob sees the same reminder with no list at all, and no list_id
-        // to post back — lists are one person's filing system.
+        // to post back through the edit sheet, and no lists of his own yet.
         $this->actingAs($bob)
             ->get(route('reminders.index'))
             ->assertInertia(fn ($page) => $page
@@ -361,6 +547,28 @@ class ReminderListTest extends TestCase
                 ->where('reminders.0.list', null)
                 ->where('reminders.0.list_id', null)
                 ->has('lists', 0)
+            );
+
+        // Bob files it into his own list, independently of Alice's filing...
+        $bobsList = ReminderList::factory()->for($bob)->create(['name' => 'Chores']);
+        $this->actingAs($bob)
+            ->put(route('lists.reminders.assign', [$bobsList, $reminder]))
+            ->assertSessionHasNoErrors();
+
+        // ...now Bob sees his own list on it...
+        $this->actingAs($bob)
+            ->get(route('reminders.index'))
+            ->assertInertia(fn ($page) => $page
+                ->where('reminders.0.list.name', 'Chores')
+                ->where('reminders.0.list_id', $bobsList->id)
+            );
+
+        // ...while Alice's own view — and her own filing — is unaffected.
+        $this->actingAs($alice)
+            ->get(route('reminders.index'))
+            ->assertInertia(fn ($page) => $page
+                ->where('reminders.0.list.name', 'Errands')
+                ->where('reminders.0.list_id', $list->id)
             );
     }
 

@@ -98,9 +98,20 @@ export type Reminder = {
     is_mine: boolean;
     /** "by Jane", already assembled server-side; null on your own rows. */
     owner_label: string | null;
-    /** The owner's list — null on anything that is not yours, by design. */
+    /**
+     * The *viewer's own* filing — your own list on your own reminders, or
+     * your independent co-filing of a reminder a household member shared
+     * with you. Never someone else's: lists stay personal even though a
+     * shared reminder can be filed by more than one person at once.
+     */
     list: ReminderList | null;
-    /** The raw value for the edit sheet's select; null when not yours. */
+    /**
+     * The raw id behind `list`, for the edit sheet's select — which only
+     * ever *writes* this back when the reminder is yours (`is_mine`); a
+     * co-filer's own value here is read-only from that form's point of view,
+     * changed instead via the lists page picker or the remove-from-list
+     * control.
+     */
     list_id: number | null;
     /** True when this reminder repeats — draws the repeat glyph. */
     is_recurring: boolean;

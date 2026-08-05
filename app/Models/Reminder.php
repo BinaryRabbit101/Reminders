@@ -90,18 +90,63 @@ class Reminder extends Model
     }
 
     /**
-     * The owner's list this reminder is filed under, if any.
+     * The owner's own list this reminder is filed under, if any.
      *
-     * Always the *owner's* list, never the viewer's: lists are personal, and
-     * sharing a reminder does not share the filing around it. Nullable by
-     * design — deleting a list orphans its reminders rather than taking them
-     * with it.
+     * Lists are personal — sharing a reminder does not share the filing
+     * around it — so this is always the *owner's* filing specifically. A
+     * household member's own filing of a shared reminder they don't own
+     * lives in {@see filings()} instead; use {@see listFor()} to read
+     * whichever one applies to a given viewer. Nullable by design — deleting
+     * a list orphans its reminders rather than taking them with it.
      *
      * @return BelongsTo<ReminderList, $this>
      */
     public function list(): BelongsTo
     {
         return $this->belongsTo(ReminderList::class, 'list_id');
+    }
+
+    /**
+     * Household members' own filings of this reminder — never the owner's
+     * own (that's {@see list()}/`list_id`), always someone it's shared with.
+     *
+     * @return HasMany<ReminderListFiling, $this>
+     */
+    public function filings(): HasMany
+    {
+        return $this->hasMany(ReminderListFiling::class);
+    }
+
+    /**
+     * Which list this reminder is filed under, from a given viewer's own
+     * point of view: the owner reads `list_id` directly, anyone else reads
+     * their own row in {@see filings()} — independent of what the owner (or
+     * any other household member) filed it under.
+     *
+     * Uses `firstWhere` rather than `filings->first()` so this stays correct
+     * whether `filings` was eager-loaded pre-scoped to the viewer or pulled
+     * in unscoped — the latter would otherwise risk handing back a different
+     * household member's list.
+     */
+    public function listIdFor(User $viewer): ?int
+    {
+        if ($viewer->id === $this->user_id) {
+            return $this->list_id;
+        }
+
+        return $this->filings->firstWhere('user_id', $viewer->id)?->list_id;
+    }
+
+    /**
+     * The list model behind {@see listIdFor()}, for presenting the badge.
+     */
+    public function listFor(User $viewer): ?ReminderList
+    {
+        if ($viewer->id === $this->user_id) {
+            return $this->list;
+        }
+
+        return $this->filings->firstWhere('user_id', $viewer->id)?->list;
     }
 
     /**
