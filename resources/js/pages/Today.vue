@@ -10,13 +10,8 @@ import {
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import EnablePushCard from '@/components/EnablePushCard.vue';
-import ListBadge from '@/components/ListBadge.vue';
-import RecurrenceBadge from '@/components/RecurrenceBadge.vue';
-import ReminderCompleteToggle from '@/components/ReminderCompleteToggle.vue';
 import ReminderFormSheet from '@/components/ReminderFormSheet.vue';
-import ReminderSnoozeMenu from '@/components/ReminderSnoozeMenu.vue';
-import SharedReminderBadge from '@/components/SharedReminderBadge.vue';
-import SnoozedBadge from '@/components/SnoozedBadge.vue';
+import TodayReminderCard from '@/components/TodayReminderCard.vue';
 import { Button } from '@/components/ui/button';
 import { today } from '@/routes';
 import { index as reminders } from '@/routes/reminders';
@@ -54,6 +49,13 @@ const editing = ref<Reminder | null>(null);
 
 const upcomingCount = computed(() =>
     board.upcoming.reduce((total, day) => total + day.reminders.length, 0),
+);
+
+// Flattened, not grouped by day: each card carries its own date now, so the
+// day-by-day headers the server groups `board.upcoming` into would just
+// repeat what the card already says.
+const upcomingReminders = computed(() =>
+    board.upcoming.flatMap((day) => day.reminders),
 );
 
 const isAllClear = computed(
@@ -140,43 +142,13 @@ function openEdit(reminder: Reminder): void {
                 </h2>
 
                 <ul class="flex flex-col gap-2">
-                    <li
+                    <TodayReminderCard
                         v-for="reminder in board.overdue"
                         :key="reminder.id"
-                        class="flex items-start gap-1 rounded-xl border border-destructive/40 bg-destructive/5 p-2 shadow-sm transition-shadow hover:shadow-md"
-                    >
-                        <ReminderCompleteToggle :reminder="reminder" />
-
-                        <button
-                            type="button"
-                            class="min-w-0 flex-1 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-destructive/10"
-                            :aria-label="`Edit ${reminder.title}`"
-                            @click="openEdit(reminder)"
-                        >
-                            <span
-                                class="block font-medium break-words text-foreground"
-                            >
-                                {{ reminder.title }}
-                            </span>
-                            <span class="block text-sm text-destructive">
-                                {{ reminder.due_relative }}
-                                <span aria-hidden="true">&middot;</span>
-                                {{ reminder.due_label }}
-                            </span>
-                            <span
-                                v-if="reminder.notes"
-                                class="mt-1 block text-sm break-words text-muted-foreground"
-                            >
-                                {{ reminder.notes }}
-                            </span>
-                            <ListBadge :reminder="reminder" />
-                            <SnoozedBadge :reminder="reminder" />
-                            <SharedReminderBadge :reminder="reminder" />
-                            <RecurrenceBadge :reminder="reminder" />
-                        </button>
-
-                        <ReminderSnoozeMenu :reminder="reminder" />
-                    </li>
+                        :reminder="reminder"
+                        overdue
+                        @edit="openEdit"
+                    />
                 </ul>
             </section>
 
@@ -198,48 +170,13 @@ function openEdit(reminder: Reminder): void {
                 </h2>
 
                 <ul v-if="board.today.length > 0" class="flex flex-col gap-2">
-                    <li
+                    <TodayReminderCard
                         v-for="reminder in board.today"
                         :key="reminder.id"
-                        class="flex items-start gap-1 rounded-xl border border-sidebar-border/70 p-2 shadow-sm transition-shadow hover:shadow-md dark:border-sidebar-border"
-                    >
-                        <ReminderCompleteToggle :reminder="reminder" />
-
-                        <button
-                            type="button"
-                            class="flex min-w-0 flex-1 items-start gap-3 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-accent"
-                            :aria-label="`Edit ${reminder.title}`"
-                            @click="openEdit(reminder)"
-                        >
-                            <span
-                                class="w-16 shrink-0 pt-0.5 text-xs font-medium text-muted-foreground tabular-nums"
-                            >
-                                {{ reminder.due_time_label }}
-                            </span>
-                            <span class="min-w-0 flex-1">
-                                <span class="block font-medium break-words">
-                                    {{ reminder.title }}
-                                </span>
-                                <span
-                                    class="block text-sm text-muted-foreground"
-                                >
-                                    {{ reminder.due_relative }}
-                                </span>
-                                <span
-                                    v-if="reminder.notes"
-                                    class="mt-1 block text-sm break-words text-muted-foreground"
-                                >
-                                    {{ reminder.notes }}
-                                </span>
-                                <ListBadge :reminder="reminder" />
-                                <SnoozedBadge :reminder="reminder" />
-                                <SharedReminderBadge :reminder="reminder" />
-                                <RecurrenceBadge :reminder="reminder" />
-                            </span>
-                        </button>
-
-                        <ReminderSnoozeMenu :reminder="reminder" />
-                    </li>
+                        :reminder="reminder"
+                        show-relative
+                        @edit="openEdit"
+                    />
                 </ul>
 
                 <p v-else class="text-sm text-muted-foreground">
@@ -250,7 +187,7 @@ function openEdit(reminder: Reminder): void {
             <!-- Upcoming -->
             <section
                 v-if="upcomingCount > 0"
-                class="flex flex-col gap-3"
+                class="flex flex-col gap-2"
                 data-test="section-upcoming"
                 aria-labelledby="section-upcoming-heading"
             >
@@ -265,57 +202,14 @@ function openEdit(reminder: Reminder): void {
                     </span>
                 </h2>
 
-                <div
-                    v-for="day in board.upcoming"
-                    :key="day.key"
-                    class="flex flex-col gap-2"
-                >
-                    <h3
-                        class="text-xs font-medium tracking-wide text-muted-foreground uppercase"
-                    >
-                        {{ day.label }}
-                    </h3>
-
-                    <ul class="flex flex-col gap-2">
-                        <li
-                            v-for="reminder in day.reminders"
-                            :key="reminder.id"
-                            class="flex items-start gap-1 rounded-xl border border-sidebar-border/70 p-2 shadow-sm transition-shadow hover:shadow-md dark:border-sidebar-border"
-                        >
-                            <ReminderCompleteToggle :reminder="reminder" />
-
-                            <button
-                                type="button"
-                                class="flex min-w-0 flex-1 items-start gap-3 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-accent"
-                                :aria-label="`Edit ${reminder.title}`"
-                                @click="openEdit(reminder)"
-                            >
-                                <span
-                                    class="w-16 shrink-0 pt-0.5 text-xs font-medium text-muted-foreground tabular-nums"
-                                >
-                                    {{ reminder.due_time_label }}
-                                </span>
-                                <span class="min-w-0 flex-1">
-                                    <span class="block font-medium break-words">
-                                        {{ reminder.title }}
-                                    </span>
-                                    <span
-                                        v-if="reminder.notes"
-                                        class="mt-1 block text-sm break-words text-muted-foreground"
-                                    >
-                                        {{ reminder.notes }}
-                                    </span>
-                                    <ListBadge :reminder="reminder" />
-                                    <SnoozedBadge :reminder="reminder" />
-                                    <SharedReminderBadge :reminder="reminder" />
-                                    <RecurrenceBadge :reminder="reminder" />
-                                </span>
-                            </button>
-
-                            <ReminderSnoozeMenu :reminder="reminder" />
-                        </li>
-                    </ul>
-                </div>
+                <ul class="flex flex-col gap-2">
+                    <TodayReminderCard
+                        v-for="reminder in upcomingReminders"
+                        :key="reminder.id"
+                        :reminder="reminder"
+                        @edit="openEdit"
+                    />
+                </ul>
             </section>
         </template>
 

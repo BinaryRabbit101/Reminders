@@ -79,6 +79,8 @@ export type Reminder = {
     due_date: string;
     due_time: string;
     due_label: string;
+    /** The date half of `due_label`, e.g. "Wed, Aug 5". */
+    due_date_label: string;
     due_time_label: string;
     due_relative: string;
     /**

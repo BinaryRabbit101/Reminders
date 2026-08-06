@@ -103,6 +103,7 @@ final class ReminderPresenter
      *     due_date: string,
      *     due_time: string,
      *     due_label: string,
+     *     due_date_label: string,
      *     due_time_label: string,
      *     due_relative: string,
      *     completed_at: string|null,
@@ -147,6 +148,9 @@ final class ReminderPresenter
             'due_date' => $local->format('Y-m-d'),
             'due_time' => $local->format('H:i'),
             'due_label' => $this->label($reminder->due_at),
+            // The date half of `due_label`, split out so a card can show it
+            // stacked above the time instead of as one long sentence.
+            'due_date_label' => $local->format('D, M j'),
             'due_time_label' => $local->format('g:i A'),
             'due_relative' => $reminder->due_at->diffForHumans(),
             // The undoable columns travel as raw UTC, not as labels: they go
