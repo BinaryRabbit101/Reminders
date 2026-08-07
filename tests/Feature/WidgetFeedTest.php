@@ -295,6 +295,27 @@ class WidgetFeedTest extends TestCase
         $response->assertJsonPath('upcoming.1.title', 'Later 2');
     }
 
+    public function test_upcoming_reserves_room_for_the_all_clear_placeholder_and_section_header()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-03 12:00', 'America/Chicago'));
+
+        $user = $this->tokenHolder();
+
+        // Nothing due today, so the widget draws "All clear." plus an
+        // "UPCOMING" heading — two lines that are not reminder rows but
+        // still cost room on a medium widget. Six candidates would fill
+        // MAX_ROWS on their own; only MAX_ROWS - 2 should actually show,
+        // or the last row runs off the bottom of the widget.
+        for ($i = 1; $i <= WidgetFeed::MAX_ROWS; $i++) {
+            $this->remind($user, '2026-08-0'.($i + 3).' 09:00', "Later {$i}");
+        }
+
+        $response = $this->getJson($this->feedUrl($user))->assertOk();
+
+        $response->assertJsonCount(0, 'today');
+        $response->assertJsonCount(WidgetFeed::MAX_ROWS - 2, 'upcoming');
+    }
+
     public function test_an_overdue_row_from_an_earlier_day_shows_its_date()
     {
         Carbon::setTestNow(Carbon::parse('2026-08-03 12:00', 'America/Chicago'));

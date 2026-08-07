@@ -70,6 +70,13 @@ final class WidgetFeed
      * first, and a full attention list means an empty (not truncated)
      * `upcoming`.
      *
+     * On an empty attention list that budget gets two rows poorer first: the
+     * "All clear." placeholder stands where `today`'s rows would have been,
+     * and the "UPCOMING" section heading appears above the list it labels.
+     * Neither is a reminder, but both cost a line on the medium widget, and
+     * counting only reminder rows against MAX_ROWS is what let a quiet day's
+     * upcoming list run text past the widget's own frame.
+     *
      * @return array{
      *     overdue_count: int,
      *     today: list<array{time: string, title: string, list_color: string|null, is_overdue: bool}>,
@@ -104,6 +111,12 @@ final class WidgetFeed
 
         $upcoming = [];
         $spareRows = self::MAX_ROWS - count($rows);
+
+        if (count($rows) === 0) {
+            // "All clear." and the "UPCOMING" heading each take a line of
+            // their own once there is nothing due today to show instead.
+            $spareRows -= 2;
+        }
 
         if ($spareRows > 0) {
             foreach ($this->upcomingAfter($user, $endOfToday, $spareRows) as $reminder) {
