@@ -1,6 +1,23 @@
 # Recurrence
 
-**Status:** ✅ **Implemented — 2026-08-03**
+**Status:** ✅ **Implemented — 2026-08-03**, amended 2026-08-07
+
+## Amendment — 2026-08-07
+
+The delivery engine no longer advances `due_at`. Originally it did — "advance hangs
+off the claim, not the send" — on the reasoning that leaving `due_at` alone would park
+an uncompleted occurrence in Overdue forever. That turned out to be wrong: a reminder
+must not roll to its next repeat until the user actually completes it. Being pushed
+(or stale-suppressed) is no longer treated as being handled.
+
+`Reminder::advanceOrComplete()` is unchanged and is still the only place the "next
+occurrence, or completed" decision is made — only its caller changed.
+`SendDueReminders` now just claims and sends (or stale-suppresses) an occurrence;
+`Reminder::complete()` is the sole caller that advances the series. An uncompleted
+recurring reminder now sits in Overdue indefinitely, exactly like a one-off would,
+however many ticks or repeat cycles pass. Every "Things later work must know" bullet
+and the "Coordination with delivery engine" section below describes the superseded
+design; read them as history, not current behavior.
 
 ## Close-out
 
@@ -12,9 +29,10 @@ crawling one step per tick. Native `<select>` for repeat pickers (matches the
 mobile-native-controls precedent). `RecurrenceRule` value object keeps the calculator
 Eloquent-free.
 
-**Things later work must know:**
-- Advance hangs off the **claim**, not the send — stale-suppressed occurrences still
-  advance. Order in `SendDueReminders`: claim → send-or-suppress → advance.
+**Things later work must know (superseded 2026-08-07 — see amendment above):**
+- ~~Advance hangs off the **claim**, not the send — stale-suppressed occurrences still
+  advance. Order in `SendDueReminders`: claim → send-or-suppress → advance.~~ Advance now
+  hangs off completion only; `SendDueReminders` stops at claim → send-or-suppress.
 - The CAS is `UPDATE ... SET due_at = <next>, snoozed_until = null WHERE id = ? AND
   due_at = <previous>` — dispatch key is the *effective* occurrence, CAS guard is raw
   `due_at`. A snooze moves one occurrence; the series schedule always resumes from its
@@ -44,10 +62,10 @@ Keep it simple — structured columns, not RRULE strings:
 | repeat_weekdays | json nullable | for `week`: [1,3,5] ISO weekday numbers |
 | repeat_until | date nullable | optional end date (local) |
 
-`due_at` always holds the **next occurrence** (UTC). After the delivery engine dispatches
-an occurrence, it advances `due_at` to the next occurrence instead of leaving the
-reminder "done". Completing a recurring reminder (snooze-and-complete spec) also advances
-it rather than setting `completed_at`; past occurrences live in `reminder_dispatches`.
+`due_at` always holds the **current occurrence** (UTC) until the user completes it — the
+delivery engine dispatching it does not move it (2026-08-07 amendment). Completing a
+recurring reminder (snooze-and-complete spec) advances `due_at` to the next occurrence
+rather than setting `completed_at`; past occurrences live in `reminder_dispatches`.
 
 ## The timezone rule applies here hardest
 
@@ -66,16 +84,19 @@ under Custom, optional end date. Recurring reminders show a repeat glyph (lucide
 
 ## Coordination with delivery engine
 
-The dispatch flow becomes: insert dispatch row → send → **advance `due_at`** (guarded
-compare-and-swap: `UPDATE ... WHERE due_at = <the occurrence just sent>` — SQLite-safe).
-When `repeat_until` is passed, stop advancing and mark completed.
+Superseded by the 2026-08-07 amendment: the dispatch flow is insert dispatch row → send
+(or stale-suppress), full stop — it never touches `due_at`. The guarded compare-and-swap
+(`UPDATE ... WHERE due_at = <the occurrence just handled>` — SQLite-safe) only runs from
+`Reminder::complete()`. When `repeat_until` is passed, completing the final occurrence
+marks it completed instead of advancing; an expired series the user never completes just
+stays overdue, same as any other uncompleted reminder.
 
 ## Acceptance criteria
 
 - Pest unit tests on the calculator: daily across a DST boundary (due stays 9:00 local),
   weekly multi-day, monthly 31st→Feb, interval > 1, until-date termination.
-- Feature test: dispatching a recurring reminder advances `due_at` exactly once even if
-  the command runs twice.
+- Feature test: dispatching a recurring reminder never advances `due_at` (superseded —
+  see amendment); completing one advances `due_at` exactly once even if attempted twice.
 - UI can create each recurrence type at 375px.
 
 ## Open questions

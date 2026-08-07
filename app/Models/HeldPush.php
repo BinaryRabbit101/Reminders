@@ -85,12 +85,11 @@ class HeldPush extends Model
      *   occurrence that will push on its own, so releasing the old one too
      *   would buzz twice for the same thing.
      *
-     * The non-way: a *recurring* reminder has already advanced past this
-     * occurrence by the time the hold is written (advancing hangs off the
-     * claim — recurrence close-out), so "due_at has moved on" must never be
-     * read as superseded. Advancing clears `snoozed_until`, which is exactly
-     * why the snooze test above is written against that column rather than
-     * against the effective due moment.
+     * The non-way: a *recurring* reminder's `due_at` only moves when the user
+     * completes it (recurrence close-out), never while a push is merely held,
+     * so "due_at has moved on" is not one of the checks here at all —
+     * `snoozed_until` is the only column this reads, which is exactly why a
+     * snooze (not a completion) is what supersedes a held push.
      */
     public function isSuperseded(): bool
     {

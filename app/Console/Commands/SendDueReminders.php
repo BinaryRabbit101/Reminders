@@ -7,7 +7,6 @@ use App\Models\Reminder;
 use App\Models\ReminderDispatch;
 use App\Models\User;
 use App\Notifications\ReminderDueNotification;
-use App\Support\RecurrenceCalculator;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -21,13 +20,19 @@ use Illuminate\Support\Facades\Notification;
  * Modelled on LittlePocketMeseum's SendWishlistReminders (query → decide →
  * Notification::send), with the send-once machinery this app needs.
  *
- * QUIET HOURS sit *inside* the send step and nowhere else. Claiming,
- * stale-suppression and advancing are untouched by them: an occurrence that
- * falls in somebody's night is still claimed, still marked sent, and a
- * recurring series still steps forward on schedule. All that changes is which
- * channels reach that one recipient when — the in-app record goes out now, the
- * push is written to `held_pushes` and released at the end of their window by
- * {@see releaseHeldPushes()}, which runs from this same per-minute sweep.
+ * A recurring reminder never moves on by itself here — only {@see
+ * \App\Models\Reminder::complete()} advances `due_at`. This command claims and
+ * sends (or stale-suppresses) an occurrence at most once, and then leaves it
+ * alone: an uncompleted recurring reminder sits in Overdue, unchanged,
+ * however many ticks pass, exactly like a one-off would.
+ *
+ * QUIET HOURS sit *inside* the send step and nowhere else. Claiming and
+ * stale-suppression are untouched by them: an occurrence that falls in
+ * somebody's night is still claimed and still marked sent. All that changes is
+ * which channels reach that one recipient when — the in-app record goes out
+ * now, the push is written to `held_pushes` and released at the end of their
+ * window by {@see releaseHeldPushes()}, which runs from this same per-minute
+ * sweep.
  *
  * Per recipient, deliberately. Two household members share one reminder but
  * not one bedtime, so the same occurrence can be loud for one of them and held
@@ -67,7 +72,6 @@ class SendDueReminders extends Command
         $sent = 0;
         $suppressed = 0;
         $held = 0;
-        $advanced = 0;
 
         foreach (Reminder::query()->due($now)->with(['user', 'list'])->get() as $reminder) {
             $occurredAt = $reminder->effectiveDueAt();
@@ -102,22 +106,16 @@ class SendDueReminders extends Command
                 $sent++;
             }
 
-            // The claim is what makes this occurrence ours, so the series
-            // moves on here — whether or not a push actually went out. A
-            // stale-suppressed occurrence is still spent, and leaving
-            // `due_at` on it would park the reminder in Overdue forever.
-            // Advancing hangs off the claim, never off the send.
-            //
-            // The calculator is the *owner's*: there is no acting user in the
-            // scheduler, and "every day at 9:00" means nine o'clock where the
-            // person who set it up lives.
-            if ($reminder->advanceOrComplete(RecurrenceCalculator::for($reminder->user), $occurredAt)) {
-                $advanced++;
-            }
+            // Deliberately nothing here moves `due_at`. Being notified is not
+            // being done — a recurring reminder only steps to its next
+            // occurrence when the user completes it (Reminder::complete()).
+            // Parking an uncompleted occurrence in Overdue forever is the
+            // point, not a bug: it stays visible until it's actually dealt
+            // with.
         }
 
         $this->info(
-            "Reminders due: sent {$sent}, suppressed {$suppressed} as stale, advanced {$advanced} recurring, ".
+            "Reminders due: sent {$sent}, suppressed {$suppressed} as stale, ".
             "held {$held} push(es) for quiet hours, released {$released}."
         );
 

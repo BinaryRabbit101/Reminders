@@ -244,17 +244,17 @@ class Reminder extends Model
      * Move a repeating reminder on to its next occurrence — or complete it
      * when its rule has run out.
      *
-     * This is the single seam both the delivery engine and (later) the
-     * complete endpoint go through, so "what happens after an occurrence is
-     * handled" is defined once.
+     * This is the seam {@see complete()} goes through, so "what happens when
+     * an occurrence is dealt with" is defined once. Nothing else calls this —
+     * the delivery engine (`SendDueReminders`) only claims and sends; being
+     * pushed is not the same as being done, so a recurring reminder never
+     * moves until a user actually completes it.
      *
      *   $handled = $reminder->advanceOrComplete($calculator, $occurredAt);
      *
      * Returns **false only for a one-off reminder**, which it leaves entirely
-     * alone — the caller decides what that means. Being pushed is not the
-     * same as being done, so the delivery engine ignores the result; the
-     * complete endpoint should read it as "nothing repeats here, set
-     * completed_at yourself".
+     * alone — the caller decides what that means. The complete endpoint reads
+     * false as "nothing repeats here, set completed_at yourself".
      *
      * Two moments are in play and they are not the same one:
      *

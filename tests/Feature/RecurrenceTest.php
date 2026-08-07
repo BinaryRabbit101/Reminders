@@ -15,13 +15,15 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
- * Recurrence where it meets the rest of the app: the delivery engine
- * advancing a series, the form saving one, and the presenter describing one.
+ * Recurrence where it meets the rest of the app: the delivery engine leaving
+ * a series alone, completion advancing it, the form saving one, and the
+ * presenter describing one.
  *
  * The maths itself lives in tests/Unit/RecurrenceCalculatorTest.php — what is
  * under test here is the bookkeeping around it, above all that advancing
- * hangs off the dispatch *claim* and can therefore only ever happen once per
- * occurrence.
+ * hangs off *completion* and nothing else: a recurring reminder stays exactly
+ * where it is, however many times it's pushed, suppressed as stale, or left
+ * overdue, until the user (or the API) completes it.
  */
 class RecurrenceTest extends TestCase
 {
@@ -47,7 +49,7 @@ class RecurrenceTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_dispatching_a_recurring_reminder_advances_it_to_the_next_occurrence()
+    public function test_dispatching_a_recurring_reminder_does_not_advance_it()
     {
         Notification::fake();
 
@@ -55,6 +57,7 @@ class RecurrenceTest extends TestCase
         $reminder = Reminder::factory()->for($user)->repeating('day')->create([
             'due_at' => Carbon::now()->subMinute(),
         ]);
+        $due = $reminder->due_at->utc()->format('Y-m-d H:i:s');
 
         $this->artisan('reminders:send-due')->assertSuccessful();
 
@@ -62,14 +65,15 @@ class RecurrenceTest extends TestCase
 
         $reminder->refresh();
 
-        $this->assertSame(
-            Carbon::parse(self::NOW, 'UTC')->subMinute()->addDay()->format('Y-m-d H:i:s'),
-            $reminder->due_at->utc()->format('Y-m-d H:i:s'),
-        );
+        // Being pushed is not being done: the series only steps forward when
+        // the user completes it, so it stays exactly where it was — and
+        // stays visibly overdue rather than quietly rolling forward.
+        $this->assertSame($due, $reminder->due_at->utc()->format('Y-m-d H:i:s'));
         $this->assertNull($reminder->completed_at);
+        $this->assertTrue(Reminder::query()->due()->whereKey($reminder->id)->exists());
     }
 
-    public function test_a_second_run_does_not_advance_the_same_occurrence_again()
+    public function test_a_second_run_does_not_send_a_duplicate_notification()
     {
         Notification::fake();
 
@@ -77,19 +81,16 @@ class RecurrenceTest extends TestCase
         $reminder = Reminder::factory()->for($user)->repeating('day')->create([
             'due_at' => Carbon::now()->subMinute(),
         ]);
+        $due = $reminder->due_at->utc()->format('Y-m-d H:i:s');
 
         $this->artisan('reminders:send-due')->assertSuccessful();
         $this->artisan('reminders:send-due')->assertSuccessful();
 
-        // One push, one dispatch row, one day of movement — the claim is
-        // what gates the advance, so a second tick has nothing to do.
+        // One push, one dispatch row — the claim is what gates the send, and
+        // due_at never moves until the user completes it.
         Notification::assertSentToTimes($user, ReminderDueNotification::class, 1);
         $this->assertDatabaseCount('reminder_dispatches', 1);
-
-        $this->assertSame(
-            Carbon::parse(self::NOW, 'UTC')->subMinute()->addDay()->format('Y-m-d H:i:s'),
-            $reminder->refresh()->due_at->utc()->format('Y-m-d H:i:s'),
-        );
+        $this->assertSame($due, $reminder->refresh()->due_at->utc()->format('Y-m-d H:i:s'));
     }
 
     public function test_a_one_off_reminder_is_neither_advanced_nor_completed_by_being_pushed()
@@ -111,7 +112,7 @@ class RecurrenceTest extends TestCase
         $this->assertNull($reminder->completed_at);
     }
 
-    public function test_a_stale_suppressed_occurrence_still_moves_the_series_on()
+    public function test_a_stale_suppressed_occurrence_does_not_move_the_series()
     {
         Notification::fake();
 
@@ -119,6 +120,7 @@ class RecurrenceTest extends TestCase
         $reminder = Reminder::factory()->for($user)->repeating('day')->create([
             'due_at' => Carbon::now()->subHour(),
         ]);
+        $due = $reminder->due_at->utc()->format('Y-m-d H:i:s');
 
         $this->artisan('reminders:send-due')->assertSuccessful();
 
@@ -128,12 +130,10 @@ class RecurrenceTest extends TestCase
             'sent_at' => null,
         ]);
 
-        // The occurrence was spent whether or not anyone heard about it;
-        // leaving due_at on it would park the reminder in Overdue for good.
-        $this->assertSame(
-            Carbon::parse(self::NOW, 'UTC')->subHour()->addDay()->format('Y-m-d H:i:s'),
-            $reminder->refresh()->due_at->utc()->format('Y-m-d H:i:s'),
-        );
+        // Nobody has dealt with this occurrence — being suppressed as stale
+        // is not the same as being done, so it stays put, visibly overdue.
+        $this->assertSame($due, $reminder->refresh()->due_at->utc()->format('Y-m-d H:i:s'));
+        $this->assertNull($reminder->completed_at);
     }
 
     public function test_the_series_continues_from_the_schedule_not_from_the_snooze()
@@ -155,19 +155,26 @@ class RecurrenceTest extends TestCase
             'due_at' => Carbon::parse(self::NOW, 'UTC')->subMinute()->format('Y-m-d H:i:s'),
         ]);
 
-        $reminder->refresh();
+        // ...but dispatching it hasn't moved the series: it's still on the
+        // original schedule until the user completes it.
+        $this->assertSame(
+            '2026-08-03 09:00',
+            $reminder->refresh()->due_at->setTimezone(self::TIMEZONE)->format('Y-m-d H:i'),
+        );
 
-        // ...while the series steps on from due_at, so tomorrow is 09:00
-        // again rather than 12:59. A snooze moves one occurrence, never the
-        // schedule. And the snooze itself is spent.
+        $reminder->complete(RecurrenceCalculator::for($user));
+
+        // Completing steps on from due_at, so tomorrow is 09:00 again rather
+        // than 12:59. A snooze moves one occurrence, never the schedule. And
+        // the snooze itself is spent.
         $this->assertSame(
             '2026-08-04 09:00',
-            $reminder->due_at->setTimezone(self::TIMEZONE)->format('Y-m-d H:i'),
+            $reminder->refresh()->due_at->setTimezone(self::TIMEZONE)->format('Y-m-d H:i'),
         );
         $this->assertNull($reminder->snoozed_until);
     }
 
-    public function test_a_snooze_that_outlived_several_occurrences_catches_up_to_the_future()
+    public function test_a_snooze_that_outlived_several_occurrences_catches_up_to_the_future_on_completion()
     {
         Notification::fake();
 
@@ -179,18 +186,18 @@ class RecurrenceTest extends TestCase
 
         $this->artisan('reminders:send-due')->assertSuccessful();
 
-        // A week of missed 09:00s is not replayed one scheduler tick at a
-        // time: the series lands on the next occurrence still ahead of now.
+        $reminder->complete(RecurrenceCalculator::for($user));
+
+        // A week of missed 09:00s is not replayed one completion at a time:
+        // the series lands on the next occurrence still ahead of now.
         $this->assertSame(
             '2026-08-04 09:00',
             $reminder->refresh()->due_at->setTimezone(self::TIMEZONE)->format('Y-m-d H:i'),
         );
     }
 
-    public function test_a_weekly_rule_advances_to_its_next_chosen_weekday()
+    public function test_a_weekly_rule_advances_to_its_next_chosen_weekday_on_completion()
     {
-        Notification::fake();
-
         $user = User::factory()->create();
         // 2026-08-03 is a Monday; the rule also runs Wednesdays and Fridays.
         $reminder = Reminder::factory()->for($user)
@@ -198,7 +205,7 @@ class RecurrenceTest extends TestCase
             ->repeating('week', weekdays: [1, 3, 5])
             ->create();
 
-        $this->artisan('reminders:send-due')->assertSuccessful();
+        $reminder->complete(RecurrenceCalculator::for($user));
 
         $this->assertSame(
             '2026-08-05 12:59',
@@ -206,7 +213,7 @@ class RecurrenceTest extends TestCase
         );
     }
 
-    public function test_a_series_past_its_end_date_is_completed_instead_of_advanced()
+    public function test_dispatching_past_the_end_date_still_leaves_it_pending_to_complete()
     {
         Notification::fake();
 
@@ -220,6 +227,26 @@ class RecurrenceTest extends TestCase
 
         Notification::assertSentTo($user, ReminderDueNotification::class);
 
+        $reminder->refresh();
+
+        // An expired series the user never completed is not silently closed
+        // out — it stays overdue like anything else uncompleted.
+        $this->assertNull($reminder->completed_at);
+        $this->assertSame(
+            '2026-08-03 12:59',
+            $reminder->due_at->setTimezone(self::TIMEZONE)->format('Y-m-d H:i'),
+        );
+    }
+
+    public function test_completing_a_series_past_its_end_date_completes_it_instead_of_advancing()
+    {
+        $user = User::factory()->create();
+        $reminder = Reminder::factory()->for($user)
+            ->dueLocal('2026-08-03 12:59')
+            ->repeating('day', until: '2026-08-03')
+            ->create();
+
+        $reminder->complete(RecurrenceCalculator::for($user));
         $reminder->refresh();
 
         // The last occurrence keeps its due_at; completed_at is what says
@@ -264,7 +291,7 @@ class RecurrenceTest extends TestCase
         $this->assertNull($reminder->refresh()->completed_at);
     }
 
-    public function test_a_shared_recurring_reminder_still_fans_out_and_advances_once()
+    public function test_a_shared_recurring_reminder_fans_out_and_notifies_once()
     {
         Notification::fake();
 
@@ -275,25 +302,30 @@ class RecurrenceTest extends TestCase
         $reminder = Reminder::factory()->for($alice)->shared()->repeating('day')->create([
             'due_at' => Carbon::now()->subMinute(),
         ]);
+        $due = $reminder->due_at->utc()->format('Y-m-d H:i:s');
 
         $this->artisan('reminders:send-due')->assertSuccessful();
 
         Notification::assertSentTo($alice, ReminderDueNotification::class);
         Notification::assertSentTo($bob, ReminderDueNotification::class);
 
-        // Advancing is row-level: one reminder, one advance, however many
-        // people it reached.
+        // One occurrence, one claim, however many people it reached — and
+        // the series has not moved.
         $this->assertDatabaseCount('reminder_dispatches', 1);
+        $this->assertSame($due, $reminder->refresh()->due_at->utc()->format('Y-m-d H:i:s'));
+
+        $reminder->complete(RecurrenceCalculator::for($alice));
+
+        // Advancing is row-level: one reminder, one advance, whoever
+        // completes it.
         $this->assertSame(
             Carbon::parse(self::NOW, 'UTC')->subMinute()->addDay()->format('Y-m-d H:i:s'),
             $reminder->refresh()->due_at->utc()->format('Y-m-d H:i:s'),
         );
     }
 
-    public function test_a_monthly_series_climbs_back_to_its_anchor_day_through_the_engine()
+    public function test_a_monthly_series_climbs_back_to_its_anchor_day_on_completion()
     {
-        Notification::fake();
-
         $user = User::factory()->create();
         // Created on the 31st, so the anchor is 31 even though February will
         // force the stored due_at down to the 28th.
@@ -305,7 +337,7 @@ class RecurrenceTest extends TestCase
         $this->assertSame(31, $reminder->repeat_anchor_day);
 
         Carbon::setTestNow(Carbon::parse('2026-01-31 09:01', self::TIMEZONE));
-        $this->artisan('reminders:send-due')->assertSuccessful();
+        $reminder->complete(RecurrenceCalculator::for($user));
 
         $this->assertSame(
             '2026-02-28 09:00',
@@ -313,7 +345,7 @@ class RecurrenceTest extends TestCase
         );
 
         Carbon::setTestNow(Carbon::parse('2026-02-28 09:01', self::TIMEZONE));
-        $this->artisan('reminders:send-due')->assertSuccessful();
+        $reminder->complete(RecurrenceCalculator::for($user));
 
         $this->assertSame(
             '2026-03-31 09:00',

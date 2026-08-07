@@ -326,7 +326,7 @@ class QuietHoursDeliveryTest extends TestCase
         );
     }
 
-    public function test_a_recurring_reminder_still_advances_while_its_push_is_held()
+    public function test_a_recurring_reminder_does_not_advance_while_its_push_is_held()
     {
         $this->freeze('2026-08-03 23:00');
 
@@ -336,17 +336,15 @@ class QuietHoursDeliveryTest extends TestCase
             'repeat_unit' => 'day',
             'repeat_interval' => 1,
         ]);
+        $due = $reminder->due_at->utc()->format('Y-m-d H:i:s');
 
         $this->artisan('reminders:send-due')->assertSuccessful();
 
-        // Advancing hangs off the claim, and quiet hours do not touch claims.
-        $this->assertSame(
-            '2026-08-04 23:00:00',
-            $reminder->refresh()->due_at->setTimezone(self::ZONE)->format('Y-m-d H:i:s'),
-        );
+        // Advancing hangs off completion now, never off the claim — quiet
+        // hours or not, the series stays put until the user deals with it.
+        $this->assertSame($due, $reminder->refresh()->due_at->utc()->format('Y-m-d H:i:s'));
 
-        // The held push is still about last night's occurrence, and the fact
-        // the series moved on must not make it look superseded.
+        // The held push is still about last night's occurrence either way.
         $this->assertDatabaseCount('held_pushes', 1);
 
         Notification::fake();
