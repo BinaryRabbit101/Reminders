@@ -81,4 +81,26 @@ class ReminderCrudTest extends DuskTestCase
 
         $this->assertDatabaseMissing('reminders', ['id' => $reminder->id]);
     }
+
+    public function test_user_can_toggle_completed_reminders_visibility()
+    {
+        $user = User::factory()->create();
+        Reminder::factory()->for($user)->create(['title' => 'Still pending']);
+        Reminder::factory()->for($user)->completed()->create(['title' => 'Long done']);
+
+        $this->browse(function (Browser $browser) use ($user) {
+            $browser->loginAs($user)
+                ->visit('/reminders')
+                ->assertSee('Still pending')
+                ->assertDontSee('Long done')
+                ->click('[data-test="show-completed-toggle"]')
+                ->pause(700)
+                ->assertSee('Still pending')
+                ->assertSee('Long done')
+                ->click('[data-test="show-completed-toggle"]')
+                ->pause(700)
+                ->assertSee('Still pending')
+                ->assertDontSee('Long done');
+        });
+    }
 }

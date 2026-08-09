@@ -16,12 +16,16 @@ class ReminderCompleteAndSnoozeTest extends DuskTestCase
         $reminder = Reminder::factory()->for($user)->create(['title' => 'Pay the water bill']);
 
         $this->browse(function (Browser $browser) use ($user) {
+            // Completed reminders are hidden by default, so ticking off the
+            // only reminder drops its row and lands on the empty state —
+            // the completion toast still names it, so assertDontSee($title)
+            // would be a false negative.
             $browser->loginAs($user)
                 ->visit('/reminders')
                 ->assertAttribute('[data-test="complete-toggle"]', 'aria-checked', 'false')
                 ->click('[data-test="complete-toggle"]')
                 ->pause(700)
-                ->assertAttribute('[data-test="complete-toggle"]', 'aria-checked', 'true');
+                ->assertMissing('[data-test="complete-toggle"]');
         });
 
         $this->assertNotNull($reminder->fresh()->completed_at);
@@ -36,8 +40,10 @@ class ReminderCompleteAndSnoozeTest extends DuskTestCase
         ]);
 
         $this->browse(function (Browser $browser) use ($user) {
+            // Completed reminders are hidden by default — reveal them so the
+            // toggle for this one is actually on the page.
             $browser->loginAs($user)
-                ->visit('/reminders')
+                ->visit('/reminders?show_completed=1')
                 ->assertAttribute('[data-test="complete-toggle"]', 'aria-checked', 'true')
                 ->click('[data-test="complete-toggle"]')
                 ->pause(700)

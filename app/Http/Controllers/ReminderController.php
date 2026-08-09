@@ -23,6 +23,10 @@ class ReminderController extends Controller
      * nothing and the filter is simply dropped rather than 403-ing or leaking
      * the fact that the list exists. Filtering on `list_id` also cannot show
      * another account's rows: only an owner ever files their own reminders.
+     *
+     * `?show_completed=1` lifts the default hiding of completed reminders.
+     * Hidden by default so the list stays focused on what's still due; the
+     * toggle is for the occasional "what did I finish" glance.
      */
     public function index(Request $request): Response
     {
@@ -31,6 +35,7 @@ class ReminderController extends Controller
 
         $listId = $request->integer('list');
         $activeList = $listId > 0 ? $user->lists()->find($listId) : null;
+        $showCompleted = $request->boolean('show_completed');
 
         $reminders = Reminder::query()
             ->visibleTo($user)
@@ -50,6 +55,7 @@ class ReminderController extends Controller
                 ->where(fn ($query) => $query->where('user_id', $user->id)->where('list_id', $activeList->id))
                 ->orWhereHas('filings', fn ($query) => $query->where('user_id', $user->id)->where('list_id', $activeList->id))
             ))
+            ->when(! $showCompleted, fn ($query) => $query->pending())
             ->orderBy('due_at')
             ->get()
             ->map(fn (Reminder $reminder): array => $presenter->present($reminder, $user));
@@ -62,6 +68,7 @@ class ReminderController extends Controller
             // Which chip is lit. Null both for "All" and for an id that did
             // not resolve, so a stale link lands on the unfiltered page.
             'active_list_id' => $activeList?->id,
+            'show_completed' => $showCompleted,
             // The fixed palette, so the reminder sheet's inline "new list"
             // dialog can draw the same swatch picker /lists uses, without a
             // round trip to fetch it.

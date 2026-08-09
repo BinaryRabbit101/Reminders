@@ -28,6 +28,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { index as listsIndex } from '@/routes/lists';
 import { index } from '@/routes/reminders';
 import type {
@@ -39,18 +41,27 @@ import type {
 
 // Prop names are the server's own, snake_case included — Inertia passes the
 // page props through untouched.
-const { reminders, defaults, lists, active_list_id, timezone, palette } =
-    defineProps<{
-        reminders: Reminder[];
-        defaults: ReminderFormDefaults;
-        /** The viewer's own lists — the filter chips and the sheet's select. */
-        lists: ReminderListSummary[];
-        /** Which chip is lit; null for "All", and for an id that did not resolve. */
-        active_list_id: number | null;
-        timezone: string;
-        /** The fixed palette, for the sheet's inline "new list" dialog. */
-        palette: ListColorOption[];
-    }>();
+const {
+    reminders,
+    defaults,
+    lists,
+    active_list_id,
+    show_completed,
+    timezone,
+    palette,
+} = defineProps<{
+    reminders: Reminder[];
+    defaults: ReminderFormDefaults;
+    /** The viewer's own lists — the filter chips and the sheet's select. */
+    lists: ReminderListSummary[];
+    /** Which chip is lit; null for "All", and for an id that did not resolve. */
+    active_list_id: number | null;
+    /** Whether completed reminders are included in `reminders`. */
+    show_completed: boolean;
+    timezone: string;
+    /** The fixed palette, for the sheet's inline "new list" dialog. */
+    palette: ListColorOption[];
+}>();
 
 defineOptions({
     layout: {
@@ -102,6 +113,24 @@ const activeList = computed(
     () => lists.find((list) => list.id === active_list_id) ?? null,
 );
 
+/**
+ * Builds the reminders index URL for a combination of the two independent
+ * filters, so setting one never silently resets the other.
+ */
+function filterUrl(listId: number | null, showCompleted: boolean): string {
+    return index.url({
+        query: {
+            ...(listId ? { list: listId } : {}),
+            ...(showCompleted ? { show_completed: 1 } : {}),
+        },
+    });
+}
+
+/** A list-filter link's href, carrying along the completed-visibility toggle. */
+function filterHref(listId: number | null): string {
+    return filterUrl(listId, show_completed);
+}
+
 /** How a filter chip is styled, lit or not. */
 function chipClass(listId: number | null): string {
     const base =
@@ -131,6 +160,19 @@ function removeFromList(reminder: Reminder): void {
             removingListFrom.value = null;
         },
     });
+}
+
+/**
+ * Flip the completed-visibility toggle, keeping whichever list filter is
+ * already active — the two filters are independent, so switching one
+ * shouldn't reset the other.
+ */
+function toggleShowCompleted(checked: boolean): void {
+    router.get(
+        filterUrl(active_list_id, checked),
+        {},
+        { preserveScroll: true, preserveState: true },
+    );
 }
 
 function isOverdue(reminder: Reminder): boolean {
@@ -190,7 +232,7 @@ function isOverdue(reminder: Reminder): boolean {
             data-test="list-filter-chips"
         >
             <Link
-                :href="index()"
+                :href="filterHref(null)"
                 :class="chipClass(null)"
                 data-test="list-filter-all"
             >
@@ -199,7 +241,7 @@ function isOverdue(reminder: Reminder): boolean {
             <Link
                 v-for="list in lists"
                 :key="list.id"
-                :href="index({ query: { list: list.id } })"
+                :href="filterHref(list.id)"
                 :class="chipClass(list.id)"
                 :data-test="`list-filter-${list.id}`"
             >
@@ -210,6 +252,18 @@ function isOverdue(reminder: Reminder): boolean {
                 />
                 <span class="truncate">{{ list.name }}</span>
             </Link>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <Switch
+                id="show-completed"
+                :model-value="show_completed"
+                data-test="show-completed-toggle"
+                @update:model-value="toggleShowCompleted"
+            />
+            <Label for="show-completed" class="text-sm font-normal">
+                Show completed
+            </Label>
         </div>
 
         <div
@@ -226,7 +280,10 @@ function isOverdue(reminder: Reminder): boolean {
                     Nothing in {{ activeList.name }}
                 </p>
                 <p class="text-sm text-muted-foreground">
-                    <Link :href="index()" class="underline underline-offset-4">
+                    <Link
+                        :href="filterHref(null)"
+                        class="underline underline-offset-4"
+                    >
                         Show every reminder
                     </Link>
                 </p>

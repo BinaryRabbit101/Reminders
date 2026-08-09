@@ -491,6 +491,37 @@ class ReminderListTest extends TestCase
             );
     }
 
+    public function test_the_reminders_index_hides_completed_reminders_by_default()
+    {
+        $user = User::factory()->create();
+        $pending = Reminder::factory()->for($user)->create(['title' => 'Pending']);
+        Reminder::factory()->for($user)->completed()->create(['title' => 'Done']);
+
+        $this->actingAs($user)
+            ->get(route('reminders.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('show_completed', false)
+                ->has('reminders', 1)
+                ->where('reminders.0.id', $pending->id)
+            );
+    }
+
+    public function test_the_reminders_index_can_reveal_completed_reminders()
+    {
+        $user = User::factory()->create();
+        Reminder::factory()->for($user)->create(['title' => 'Pending']);
+        Reminder::factory()->for($user)->completed()->create(['title' => 'Done']);
+
+        $this->actingAs($user)
+            ->get(route('reminders.index', ['show_completed' => 1]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('show_completed', true)
+                ->has('reminders', 2)
+            );
+    }
+
     public function test_the_reminders_index_shows_the_list_badge_on_the_owners_row()
     {
         $user = User::factory()->create();
