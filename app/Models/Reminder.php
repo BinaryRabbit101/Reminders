@@ -32,6 +32,7 @@ use Illuminate\Support\Collection;
  * @property int|null $repeat_anchor_day
  * @property string|null $repeat_month_mode
  * @property int|null $repeat_week_of_month
+ * @property bool $auto_complete
  * @property Carbon|null $completed_at
  * @property Carbon|null $snoozed_until
  * @property Carbon|null $created_at
@@ -42,7 +43,7 @@ use Illuminate\Support\Collection;
 #[Fillable([
     'user_id', 'list_id', 'title', 'notes', 'due_at', 'is_shared',
     'repeat_unit', 'repeat_interval', 'repeat_weekdays', 'repeat_until', 'repeat_anchor_day',
-    'repeat_month_mode', 'repeat_week_of_month',
+    'repeat_month_mode', 'repeat_week_of_month', 'auto_complete',
     'completed_at', 'snoozed_until',
 ])]
 class Reminder extends Model
@@ -76,6 +77,9 @@ class Reminder extends Model
             'repeat_until' => 'date',
             'repeat_anchor_day' => 'integer',
             'repeat_week_of_month' => 'integer',
+            // Only ever true alongside a repeat rule — ReminderRequest
+            // normalises a one-off back to false on the way in.
+            'auto_complete' => 'boolean',
         ];
     }
 
@@ -157,6 +161,48 @@ class Reminder extends Model
     public function dispatches(): HasMany
     {
         return $this->hasMany(ReminderDispatch::class);
+    }
+
+    /**
+     * The pre-alerts that run ahead of this reminder — "also tell me an hour
+     * before" (pre-alerts spec).
+     *
+     * Ordered by horizon so every surface that renders them — the form's
+     * chips, a row's tooltip, the presenter — reads in the same order the
+     * picker offers them in, without each one having to sort for itself.
+     *
+     * @return HasMany<ReminderAlert, $this>
+     */
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(ReminderAlert::class)->orderBy('offset_minutes');
+    }
+
+    /**
+     * Forget every alert snooze on this reminder.
+     *
+     * An alert's `snoozed_until` belongs to the occurrence it was set on. Left
+     * behind, the coalesce in {@see ReminderAlert::effectiveFireAt()} would
+     * pin the alert to a moment already in the past forever, and the *next*
+     * occurrence's pre-alert would never fire. So it is cleared at the two
+     * points an occurrence stops being the current one: when the series
+     * actually advances or completes ({@see advanceOrComplete()}), and when
+     * the user edits `due_at` (ReminderController@update).
+     *
+     * Returns how many alerts were cleared.
+     */
+    public function clearAlertSnoozes(): int
+    {
+        $cleared = ReminderAlert::query()
+            ->where('reminder_id', $this->getKey())
+            ->whereNotNull('snoozed_until')
+            ->update(['snoozed_until' => null]);
+
+        // Anything already loaded is now stale — a caller re-reading
+        // `$reminder->alerts` must not be handed the snoozes just dropped.
+        $this->unsetRelation('alerts');
+
+        return $cleared;
     }
 
     /**
@@ -245,10 +291,12 @@ class Reminder extends Model
      * when its rule has run out.
      *
      * This is the seam {@see complete()} goes through, so "what happens when
-     * an occurrence is dealt with" is defined once. Nothing else calls this —
-     * the delivery engine (`SendDueReminders`) only claims and sends; being
-     * pushed is not the same as being done, so a recurring reminder never
-     * moves until a user actually completes it.
+     * an occurrence is dealt with" is defined once. Being pushed is not the
+     * same as being done, so a recurring reminder normally never moves until a
+     * user actually completes it; the one exception is a reminder whose owner
+     * ticked `auto_complete`, for which `SendDueReminders` calls this straight
+     * off the claim (auto-complete-on-dispatch spec). The delivery engine
+     * touches `due_at` in that one case and nowhere else.
      *
      *   $handled = $reminder->advanceOrComplete($calculator, $occurredAt);
      *
@@ -299,6 +347,12 @@ class Reminder extends Model
 
         if ($advanced > 0) {
             $this->forceFill($changes)->syncOriginal();
+
+            // The occurrence just dealt with was the one every alert snooze
+            // belonged to. Dropping them here is what lets the next
+            // occurrence's pre-alerts fire on schedule — and losing the CAS
+            // race means somebody else already did this too.
+            $this->clearAlertSnoozes();
         }
 
         return true;

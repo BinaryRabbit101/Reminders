@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AlertsBadge from '@/components/AlertsBadge.vue';
 import ListBadge from '@/components/ListBadge.vue';
 import RecurrenceBadge from '@/components/RecurrenceBadge.vue';
 import ReminderCompleteToggle from '@/components/ReminderCompleteToggle.vue';
@@ -78,6 +79,7 @@ defineEmits<{ edit: [reminder: Reminder] }>();
                 <SnoozedBadge :reminder="reminder" />
                 <SharedReminderBadge :reminder="reminder" />
                 <RecurrenceBadge :reminder="reminder" />
+                <AlertsBadge :reminder="reminder" />
             </span>
         </button>
 

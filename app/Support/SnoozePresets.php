@@ -31,6 +31,17 @@ final class SnoozePresets
     /** The preset the push notification's "Snooze 1h" button asks for. */
     public const NOTIFICATION_DEFAULT = '1h';
 
+    /**
+     * The preset a *pre-alert* push's snooze button asks for.
+     *
+     * Shorter than the due notification's hour on purpose: a pre-alert lives
+     * in the gap before the reminder is due, and an hour would routinely land
+     * past the due moment — at which point the alert would never fire again
+     * (it only fires strictly before). Ten minutes fits inside even the
+     * shortest horizon on offer.
+     */
+    public const PRE_ALERT_NOTIFICATION_DEFAULT = '10m';
+
     public function __construct(
         private readonly string $timezone,
         private readonly string $defaultTime,

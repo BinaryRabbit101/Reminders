@@ -59,6 +59,33 @@ export type ReminderListSummary = ReminderList & {
     reminder_count: number;
 };
 
+/**
+ * A pre-alert on a reminder — "also tell me an hour before".
+ *
+ * Stored as an offset in minutes from the reminder's `due_at`; every string
+ * here is assembled server-side (`ReminderAlert::offsetLabel()` and
+ * `ReminderPresenter`), so the client renders them and never phrases a
+ * horizon itself.
+ */
+export type ReminderAlert = {
+    id: number;
+    /** Minutes before `due_at` this alert fires. One of `AlertOffsetOption`. */
+    offset_minutes: number;
+    /** "1 hour before". */
+    label: string;
+    /** True only while this alert's own snooze is still ahead. */
+    is_snoozed: boolean;
+    /** "Snoozed until Wed, Aug 5, 2:50 PM"; null when not snoozed. */
+    snooze_label: string | null;
+};
+
+/** One horizon the pre-alert picker offers, labelled server-side. */
+export type AlertOffsetOption = {
+    /** Minutes before the due moment — the value posted as `alerts[]`. */
+    value: number;
+    label: string;
+};
+
 /** One entry of the colour picker's palette. */
 export type ListColorOption = {
     value: ListColorToken;
@@ -137,6 +164,18 @@ export type Reminder = {
     repeat_month_mode: RepeatMonthMode | null;
     /** Set only alongside `repeat_month_mode === 'nth_weekday'`. */
     repeat_week_of_month: WeekOfMonth | null;
+    /**
+     * Whether going off is enough to move this series on to its next
+     * occurrence, instead of it waiting in Overdue to be completed. Only ever
+     * true alongside a `repeat_unit` — the server normalises a one-off's value
+     * back to false.
+     */
+    auto_complete: boolean;
+    /**
+     * The pre-alerts set on this reminder, nearest horizon first. Empty for
+     * most rows — which is exactly what the bell glyph keys off.
+     */
+    alerts: ReminderAlert[];
 };
 
 /** One local day of upcoming reminders, with its heading already formatted. */
@@ -176,6 +215,12 @@ export type ReminderFormDefaults = {
     repeat_until: string | null;
     repeat_month_mode: RepeatMonthMode | null;
     repeat_week_of_month: WeekOfMonth | null;
+    /** A new repeating reminder waits to be completed until told otherwise. */
+    auto_complete: boolean;
+    /** New reminders get no pre-alerts until the user ticks one. */
+    alerts: number[];
+    /** Every horizon the pre-alert chips offer, in ascending order. */
+    alert_offsets: AlertOffsetOption[];
 };
 
 /** One entry of the curated timezone select, labelled server-side. */

@@ -3,6 +3,7 @@
 use App\Http\Controllers\HistoryController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\ReminderActionController;
+use App\Http\Controllers\ReminderAlertController;
 use App\Http\Controllers\ReminderController;
 use App\Http\Controllers\ReminderListController;
 use App\Http\Controllers\TodayController;
@@ -29,6 +30,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('reminders/{reminder}/complete', [ReminderActionController::class, 'complete'])->name('reminders.complete');
     Route::post('reminders/{reminder}/snooze', [ReminderActionController::class, 'snooze'])->name('reminders.snooze');
     Route::post('reminders/{reminder}/restore', [ReminderActionController::class, 'restore'])->name('reminders.restore');
+
+    // Snoozing a *pre-alert* rather than the reminder itself. Scoped
+    // bindings, so an alert that belongs to another reminder is a 404 before
+    // the policy is ever consulted. Its signed twin lives in
+    // routes/notification-actions.php.
+    Route::post('reminders/{reminder}/alerts/{alert}/snooze', [ReminderAlertController::class, 'snooze'])
+        ->scopeBindings()
+        ->name('reminders.alerts.snooze');
 
     // Managing a list itself is always owner-only: the index reads
     // `$user->lists()` and the rest go through ReminderListPolicy. Filing a

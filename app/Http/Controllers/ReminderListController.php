@@ -53,6 +53,7 @@ class ReminderListController extends Controller
                 ->with([
                     'user',
                     'list',
+                    'alerts',
                     'filings' => fn ($query) => $query->where('user_id', $user->id)->with('list'),
                 ])
                 ->orderBy('due_at')

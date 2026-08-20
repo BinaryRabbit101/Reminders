@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Http\Controllers\ReminderListController;
 use App\Models\Reminder;
+use App\Models\ReminderAlert;
 use App\Models\User;
 use App\Support\RecurrenceRule;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -85,6 +86,16 @@ class ReminderRequest extends FormRequest
             ],
             'repeat_weekdays.*' => ['integer', 'between:1,7'],
             'repeat_until' => ['nullable', 'date_format:Y-m-d', 'after:due_date'],
+            // Meaningful only alongside a repeat rule; a one-off is normalised
+            // back to false in recurrenceAttributes() rather than rejected,
+            // because an unticked checkbox posts nothing either way.
+            'auto_complete' => ['nullable', 'boolean'],
+            // The pre-alert chips, posted as `alerts[]` offsets in minutes.
+            // A closed allow-list rather than a free number: it is the same
+            // set the picker offers, and it is what keeps a "0 minutes
+            // before" alert from racing the notification it precedes.
+            'alerts' => ['nullable', 'array'],
+            'alerts.*' => ['integer', Rule::in(ReminderAlert::OFFSETS), 'distinct'],
         ];
     }
 
@@ -106,7 +117,34 @@ class ReminderRequest extends FormRequest
             'repeat_week_of_month' => 'week of the month',
             'repeat_weekdays' => 'repeat days',
             'repeat_until' => 'repeat end date',
+            'auto_complete' => 'auto-complete',
+            'alerts' => 'alerts',
+            'alerts.*' => 'alert',
         ];
+    }
+
+    /**
+     * The pre-alert horizons this request asks for, in minutes, ascending.
+     *
+     * Deliberately *not* part of {@see reminderAttributes()}: alerts are rows
+     * on their own table, not columns on `reminders`, and the controller syncs
+     * them separately so an untouched alert keeps its `snoozed_until`.
+     *
+     * An absent `alerts` key means the same thing as an empty one — none —
+     * because a checkbox group with nothing ticked posts nothing at all, the
+     * same shape `repeat_weekdays` has always had.
+     *
+     * @return list<int>
+     */
+    public function alertOffsets(): array
+    {
+        /** @var array<int, int|string> $offsets */
+        $offsets = (array) $this->validated('alerts', []);
+
+        $offsets = array_values(array_unique(array_map(intval(...), $offsets)));
+        sort($offsets);
+
+        return $offsets;
     }
 
     /**
@@ -141,6 +179,7 @@ class ReminderRequest extends FormRequest
      *     repeat_anchor_day: int|null,
      *     repeat_month_mode: string|null,
      *     repeat_week_of_month: int|null,
+     *     auto_complete: bool,
      * }
      */
     public function reminderAttributes(): array
@@ -215,6 +254,12 @@ class ReminderRequest extends FormRequest
      * `repeat_week_of_month` and `repeat_weekdays` instead, both of which the
      * user chose directly rather than the server deriving them.
      *
+     * `auto_complete` is shaped here for the same reason: it is a repeat field
+     * in everything but name, and it is meaningless without a rule. A one-off
+     * is persisted as false whatever was posted — a non-repeating reminder
+     * that ticked itself off the moment it fired would simply vanish, which
+     * nobody asked for (auto-complete-on-dispatch spec).
+     *
      * @param  Carbon  $local  The due moment as local wall-time.
      * @return array{
      *     repeat_unit: string|null,
@@ -224,6 +269,7 @@ class ReminderRequest extends FormRequest
      *     repeat_anchor_day: int|null,
      *     repeat_month_mode: string|null,
      *     repeat_week_of_month: int|null,
+     *     auto_complete: bool,
      * }
      */
     private function recurrenceAttributes(Carbon $local): array
@@ -240,6 +286,7 @@ class ReminderRequest extends FormRequest
                 'repeat_anchor_day' => null,
                 'repeat_month_mode' => null,
                 'repeat_week_of_month' => null,
+                'auto_complete' => false,
             ];
         }
 
@@ -263,6 +310,11 @@ class ReminderRequest extends FormRequest
             'repeat_anchor_day' => $isMonthly && ! $isNthWeekday ? $local->day : null,
             'repeat_month_mode' => $monthMode,
             'repeat_week_of_month' => $isNthWeekday ? (int) $this->validated('repeat_week_of_month') : null,
+            // Read with `boolean()` for the same reason `is_shared` is: an
+            // unticked checkbox posts nothing at all, and "absent" has to mean
+            // "off" or turning it back off from the edit sheet would never
+            // take.
+            'auto_complete' => $this->boolean('auto_complete'),
         ];
     }
 }

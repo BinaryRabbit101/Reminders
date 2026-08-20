@@ -3,9 +3,11 @@
 namespace App\Support;
 
 use App\Models\Reminder;
+use App\Models\ReminderAlert;
 use App\Models\ReminderCompletion;
 use App\Models\User;
 use App\Notifications\ReminderDueNotification;
+use App\Notifications\ReminderPreAlertNotification;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -25,6 +27,12 @@ use Illuminate\Support\Carbon;
  *    renders — with the title it was sent under — after the reminder itself is
  *    deleted or renamed. The reminder is looked up only to offer a link to its
  *    edit surface; a miss is simply "deleted".
+ *
+ *    A **pre-alert** writes the same shape plus `kind => 'pre_alert'`,
+ *    `fire_at` and `offset_minutes` (`ReminderPreAlertNotification`). An entry
+ *    with no `kind` at all is a due notification and behaves exactly as it
+ *    always has — that is the whole compatibility rule, and it is why the two
+ *    are told apart by a payload key rather than by the row's `type`.
  * 2. **Days are local days.** Grouping happens on the *reader's* calendar
  *    (their timezone, or the app default — ARCHITECTURE.md §1 plus
  *    `User::timezone()`), exactly like TodayBoard buckets — a 23:30
@@ -41,14 +49,17 @@ use Illuminate\Support\Carbon;
 final class NotificationHistory
 {
     /**
-     * The only notification type this feed shows — and the only one whose
-     * unread rows the badge counts and the page clears. Scoping all three to
-     * one type keeps them consistent: a future notification class cannot leave
-     * a badge lit that visiting /history can never turn off.
+     * The notification types this feed shows — and the only ones whose unread
+     * rows the badge counts and the page clears. Scoping all three to the same
+     * list keeps them consistent: a future notification class cannot leave a
+     * badge lit that visiting /history can never turn off.
      *
-     * @var class-string<ReminderDueNotification>
+     * @var list<class-string>
      */
-    public const TYPE = ReminderDueNotification::class;
+    public const TYPES = [
+        ReminderDueNotification::class,
+        ReminderPreAlertNotification::class,
+    ];
 
     /**
      * How many entries the feed carries at most. The page is a single scroll
@@ -80,7 +91,7 @@ final class NotificationHistory
      */
     public static function unreadCountFor(User $user): int
     {
-        return $user->unreadNotifications()->where('type', self::TYPE)->count();
+        return $user->unreadNotifications()->whereIn('type', self::TYPES)->count();
     }
 
     /**
@@ -201,7 +212,7 @@ final class NotificationHistory
     public function markAllRead(User $user): int
     {
         return $user->unreadNotifications()
-            ->where('type', self::TYPE)
+            ->whereIn('type', self::TYPES)
             ->update(['read_at' => Carbon::now()]);
     }
 
@@ -216,7 +227,7 @@ final class NotificationHistory
     {
         /** @var EloquentCollection<int, DatabaseNotification> $notifications */
         $notifications = $user->notifications()
-            ->where('type', self::TYPE)
+            ->whereIn('type', self::TYPES)
             ->limit(self::MAX_ENTRIES)
             ->get();
 
@@ -286,6 +297,7 @@ final class NotificationHistory
         foreach (Reminder::query()->visibleTo($user)->with([
             'user',
             'list',
+            'alerts',
             'filings' => fn ($query) => $query->where('user_id', $user->id)->with('list'),
         ])->whereKey($ids)->get() as $reminder) {
             $presented[$reminder->id] = $presenter->present($reminder, $user);
@@ -301,6 +313,7 @@ final class NotificationHistory
      * @return array{
      *     id: string,
      *     type: 'sent',
+     *     kind: 'pre_alert'|null,
      *     title: string,
      *     time_label: string,
      *     due_label: string,
@@ -316,20 +329,56 @@ final class NotificationHistory
     ): array {
         $occurredAt = $this->occurredAt($notification);
         $reminderId = $this->reminderId($notification);
+        $isPreAlert = $this->payloadString($notification, 'kind') === 'pre_alert';
 
         return [
             'id' => (string) $notification->getKey(),
             'type' => 'sent',
+            // Null for a due notification — every entry written before
+            // pre-alerts shipped, and every one written since by the due
+            // pass. The page may branch on it; it does not have to.
+            'kind' => $isPreAlert ? 'pre_alert' : null,
             // The title as it was sent, not as the reminder reads now — the
             // history is a record of what went out.
             'title' => $this->payloadString($notification, 'title') ?? 'Reminder',
             'time_label' => $presenter->toLocal($occurredAt)->format('g:i A'),
-            'due_label' => $presenter->label($occurredAt),
+            'due_label' => $isPreAlert
+                ? $this->preAlertLabel($notification, $presenter)
+                : $presenter->label($occurredAt),
             'sent_relative' => $this->sentAt($notification)->diffForHumans(),
             'is_unread' => $notification->read_at === null,
             // Null is the "deleted" state the page renders instead of a link.
             'reminder' => $reminderId === null ? null : ($reminders[$reminderId] ?? null),
         ];
+    }
+
+    /**
+     * How a pre-alert entry says what it was: "Alerted 1 hour before Wed,
+     * Aug 5, 3:00 PM".
+     *
+     * It goes in `due_label` rather than a field of its own so the existing
+     * feed renders it without a change: the second line of every row already
+     * reads "<when it was sent> · <due_label>", and this simply makes the
+     * second half tell the truth about which of the two notifications it was.
+     *
+     * The moment is the payload's `due_at`, which for a pre-alert is the
+     * **raw** occurrence it was anchored to — so `fire_at + offset` really is
+     * this moment, and the sentence is not a lie about the gap.
+     */
+    private function preAlertLabel(DatabaseNotification $notification, ReminderPresenter $presenter): string
+    {
+        $dueAt = $this->payloadString($notification, 'due_at');
+        $moment = $dueAt === null
+            ? $this->sentAt($notification)
+            : CarbonImmutable::parse($dueAt)->utc();
+
+        $offset = $this->payloadInt($notification, 'offset_minutes');
+
+        if ($offset === null) {
+            return 'Alert · '.$presenter->label($moment);
+        }
+
+        return 'Alerted '.ReminderAlert::horizonLabel($offset).' before '.$presenter->label($moment);
     }
 
     /**
@@ -342,6 +391,7 @@ final class NotificationHistory
      * @return array{
      *     id: string,
      *     type: 'completed',
+     *     kind: null,
      *     title: string,
      *     time_label: string,
      *     due_label: string,
@@ -361,6 +411,7 @@ final class NotificationHistory
         return [
             'id' => 'completed-'.$completion->getKey(),
             'type' => 'completed',
+            'kind' => null,
             'title' => $completion->title,
             'time_label' => $presenter->toLocal($completedAt)->format('g:i A'),
             'due_label' => $presenter->label($occurredAt),
@@ -371,16 +422,25 @@ final class NotificationHistory
     }
 
     /**
-     * The occurrence this entry is about, in UTC — `due_at` from the payload,
-     * falling back to when the row was written if a payload ever lacks it.
+     * The moment this entry is filed and stamped under, in UTC.
+     *
+     * For a due notification that is `due_at` — the occurrence — falling back
+     * to when the row was written if a payload ever lacks it.
+     *
+     * For a **pre-alert** it is `fire_at`, when the alert actually went out,
+     * not the due moment it was warning about. A "1 week before" alert
+     * otherwise files itself under a day it has nothing to do with, and its
+     * time stamp would name an hour nothing happened at.
      */
     private function occurredAt(DatabaseNotification $notification): CarbonImmutable
     {
-        $dueAt = $this->payloadString($notification, 'due_at');
+        $moment = $this->payloadString($notification, 'kind') === 'pre_alert'
+            ? $this->payloadString($notification, 'fire_at')
+            : $this->payloadString($notification, 'due_at');
 
-        return $dueAt === null
+        return $moment === null
             ? $this->sentAt($notification)
-            : CarbonImmutable::parse($dueAt)->utc();
+            : CarbonImmutable::parse($moment)->utc();
     }
 
     /**
@@ -420,6 +480,21 @@ final class NotificationHistory
         }
 
         return $data[$key];
+    }
+
+    /**
+     * An integer field out of the stored payload, read as defensively as
+     * {@see payloadString()} reads a string one.
+     */
+    private function payloadInt(DatabaseNotification $notification, string $key): ?int
+    {
+        $data = $notification->data;
+
+        if (! isset($data[$key]) || ! is_numeric($data[$key])) {
+            return null;
+        }
+
+        return (int) $data[$key];
     }
 
     /**

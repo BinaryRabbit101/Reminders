@@ -19,6 +19,10 @@ however many ticks or repeat cycles pass. Every "Things later work must know" bu
 and the "Coordination with delivery engine" section below describes the superseded
 design; read them as history, not current behavior.
 
+(2026-08-19: [auto-complete-on-dispatch.md](auto-complete-on-dispatch.md) made
+advance-at-dispatch available again as an explicit per-reminder opt-in — the default
+behavior described by this amendment is unchanged.)
+
 ## Close-out
 
 **Deviations:** Extra column `repeat_anchor_day` — "monthly on the 31st" is not

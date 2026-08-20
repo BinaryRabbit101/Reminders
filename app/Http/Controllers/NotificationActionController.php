@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Reminder;
+use App\Models\ReminderAlert;
 use App\Support\RecurrenceCalculator;
 use App\Support\SnoozePresets;
 use Illuminate\Http\Request;
@@ -61,6 +62,39 @@ class NotificationActionController extends Controller
         abort_unless(in_array($preset, SnoozePresets::KEYS, true), 422);
 
         $reminder->snoozeUntil(SnoozePresets::for($reminder->user)->resolve($preset));
+
+        return response()->noContent();
+    }
+
+    /**
+     * Snooze a *pre-alert* by the preset baked into its signed URL.
+     *
+     * Writes `reminder_alerts.snoozed_until` and nothing else: pushing the
+     * hour-before nudge out ten minutes must not move the reminder itself.
+     *
+     * A snooze that lands past the main due moment is accepted and then
+     * simply never fires — the delivery engine only fires an alert strictly
+     * before its reminder's effective due moment, and the main notification
+     * is coming regardless. Correct behavior, not an error; it is also why
+     * the button asks for {@see SnoozePresets::PRE_ALERT_NOTIFICATION_DEFAULT}
+     * rather than the hour a due notification defaults to.
+     */
+    public function snoozeAlert(Request $request, ReminderAlert $alert): Response
+    {
+        $preset = (string) $request->query('preset', SnoozePresets::PRE_ALERT_NOTIFICATION_DEFAULT);
+
+        abort_unless(in_array($preset, SnoozePresets::KEYS, true), 422);
+
+        $reminder = $alert->reminder;
+
+        // The reminder owner's clock, like every other action out here —
+        // there is no acting user to ask, and the same signed URL rides in
+        // every household member's copy of the push.
+        $presets = $reminder instanceof Reminder
+            ? SnoozePresets::for($reminder->user)
+            : SnoozePresets::make();
+
+        $alert->snoozeUntil($presets->resolve($preset));
 
         return response()->noContent();
     }

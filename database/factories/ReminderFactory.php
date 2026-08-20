@@ -30,6 +30,7 @@ class ReminderFactory extends Factory
             'repeat_weekdays' => null,
             'repeat_until' => null,
             'repeat_anchor_day' => null,
+            'auto_complete' => false,
             'completed_at' => null,
             'snoozed_until' => null,
         ];
@@ -60,6 +61,21 @@ class ReminderFactory extends Factory
                     ->setTimezone((string) config('reminders.timezone'))
                     ->day
                 : null,
+        ]);
+    }
+
+    /**
+     * A repeating reminder that rolls to its next occurrence the moment it
+     * goes off, instead of waiting in Overdue to be completed.
+     *
+     * Only meaningful on top of {@see repeating()} — the delivery engine
+     * ignores the flag on a one-off, exactly as the form refuses to store it
+     * on one.
+     */
+    public function autoCompleting(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'auto_complete' => true,
         ]);
     }
 

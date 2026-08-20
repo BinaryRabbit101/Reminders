@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Form, router } from '@inertiajs/vue3';
-import { ListPlus, Minus, Plus, Users } from '@lucide/vue';
+import { Bell, CheckCheck, ListPlus, Minus, Plus, Users } from '@lucide/vue';
 import { computed, nextTick, ref, watch } from 'vue';
 import ReminderController from '@/actions/App/Http/Controllers/ReminderController';
 import ReminderListController from '@/actions/App/Http/Controllers/ReminderListController';
@@ -113,6 +113,17 @@ const selectClass =
 const repeatUnit = ref<'none' | RepeatUnit>('none');
 const repeatInterval = ref(1);
 const weekdays = ref<number[]>([]);
+/** The ticked pre-alert horizons, in minutes — posted as `alerts[]`. */
+const alerts = ref<number[]>([]);
+/**
+ * Whether the series rolls on by itself when it goes off.
+ *
+ * A local ref rather than an uncontrolled `:default-value` like `is_shared`,
+ * because this control only exists while a repeat unit is chosen: switching to
+ * "Does not repeat" and back unmounts and remounts it, and an uncontrolled
+ * checkbox would silently come back unticked.
+ */
+const autoComplete = ref(false);
 const repeatUntil = ref('');
 const dueDate = ref('');
 /** The select's value — a string, because that is what an `<option>` holds. */
@@ -185,6 +196,15 @@ function syncFromProps(): void {
         monthMode.value === 'nth_weekday' && weekdays.value.length === 1
             ? weekdays.value[0]
             : isoWeekdayOf(dueDate.value);
+
+    autoComplete.value = reminder?.auto_complete ?? defaults.auto_complete;
+
+    // Pre-alerts reopen on exactly the horizons that were saved; a new
+    // reminder starts with none of them ticked.
+    alerts.value =
+        reminder !== null
+            ? reminder.alerts.map((alert) => alert.offset_minutes)
+            : [...defaults.alerts];
 
     const list = reminder?.list_id ?? defaults.list_id;
     listId.value = list === null ? '' : String(list);
@@ -705,6 +725,82 @@ function submitListDialog(): void {
                             Leave empty to repeat forever.
                         </p>
                         <InputError :message="errors.repeat_until" />
+                    </div>
+
+                    <!--
+                        Only a repeating reminder has a next occurrence to roll
+                        on to, so the control is absent entirely for a one-off
+                        rather than offered and then ignored — which is also
+                        what the server stores either way.
+                    -->
+                    <div v-if="isRepeating" class="grid gap-2">
+                        <div
+                            class="flex items-start gap-3 rounded-lg border p-3"
+                        >
+                            <Checkbox
+                                id="auto_complete"
+                                v-model="autoComplete"
+                                name="auto_complete"
+                                value="1"
+                                class="mt-0.5"
+                                data-test="auto-complete-toggle"
+                            />
+                            <div class="grid gap-1">
+                                <Label
+                                    for="auto_complete"
+                                    class="flex items-center gap-1.5"
+                                >
+                                    <CheckCheck class="size-3.5 shrink-0" />
+                                    Complete automatically when it goes off
+                                </Label>
+                                <p class="text-sm text-muted-foreground">
+                                    It moves straight to the next occurrence
+                                    instead of waiting in Overdue.
+                                </p>
+                            </div>
+                        </div>
+                        <InputError :message="errors.auto_complete" />
+                    </div>
+
+                    <!--
+                        Pre-alerts. Chips rather than a multi-select for the
+                        same reason the weekday row is chips: it is one tap
+                        per horizon on a phone, and every option stays
+                        visible. Posted as `alerts[]` offsets — nothing at
+                        all when none is ticked, which the server reads as
+                        "no alerts" exactly like `repeat_weekdays[]`.
+                    -->
+                    <div class="grid gap-2">
+                        <Label class="flex items-center gap-1.5">
+                            <Bell class="size-3.5 shrink-0" />
+                            Alert me before
+                        </Label>
+                        <div
+                            class="flex flex-wrap gap-1.5"
+                            data-test="alert-offsets"
+                        >
+                            <label
+                                v-for="option in defaults.alert_offsets"
+                                :key="option.value"
+                                :data-test="`alert-${option.value}`"
+                            >
+                                <input
+                                    :id="`alert_${option.value}`"
+                                    v-model="alerts"
+                                    type="checkbox"
+                                    name="alerts[]"
+                                    :value="option.value"
+                                    :aria-label="option.label"
+                                    class="peer sr-only"
+                                />
+                                <span
+                                    class="flex h-9 cursor-pointer items-center rounded-full border border-input px-3 text-xs font-medium whitespace-nowrap transition-colors peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:ring-[3px] peer-focus-visible:ring-ring/50"
+                                >
+                                    {{ option.label }}
+                                </span>
+                            </label>
+                        </div>
+                        <InputError :message="errors.alerts" />
                     </div>
 
                     <!--

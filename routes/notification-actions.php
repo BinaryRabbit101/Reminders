@@ -24,3 +24,9 @@ Route::post('reminders/{reminder}/complete', [NotificationActionController::clas
 
 Route::post('reminders/{reminder}/snooze', [NotificationActionController::class, 'snooze'])
     ->name('snooze');
+
+// The pre-alert push's own snooze button. Keyed on the alert alone — the
+// signature covers the id, so there is nothing a reminder in the path would
+// add beyond a second thing to keep in step.
+Route::post('alerts/{alert}/snooze', [NotificationActionController::class, 'snoozeAlert'])
+    ->name('alerts.snooze');

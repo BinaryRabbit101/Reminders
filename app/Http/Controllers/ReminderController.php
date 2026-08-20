@@ -6,6 +6,7 @@ use App\Http\Requests\ReminderRequest;
 use App\Models\Reminder;
 use App\Support\ListColor;
 use App\Support\ReminderPresenter;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -42,6 +43,7 @@ class ReminderController extends Controller
             ->with([
                 'user',
                 'list',
+                'alerts',
                 'filings' => fn ($query) => $query->where('user_id', $user->id)->with('list'),
             ])
             // Matches either half of the viewer's own filing: their own
@@ -81,7 +83,9 @@ class ReminderController extends Controller
      */
     public function store(ReminderRequest $request): RedirectResponse
     {
-        $request->user()->reminders()->create($request->reminderAttributes());
+        $reminder = $request->user()->reminders()->create($request->reminderAttributes());
+
+        $this->syncAlerts($reminder, $request->alertOffsets());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Reminder created.')]);
 
@@ -103,6 +107,7 @@ class ReminderController extends Controller
         // `update()`, so the comparison is against what's actually about to
         // be written rather than in-memory state.
         $wasShared = $reminder->is_shared;
+        $previousDueAt = CarbonImmutable::instance($reminder->due_at)->utc();
         $attributes = $request->reminderAttributes();
 
         $reminder->update($attributes);
@@ -111,9 +116,47 @@ class ReminderController extends Controller
             $reminder->filings()->delete();
         }
 
+        // An alert snooze belongs to the occurrence it was set on, and moving
+        // `due_at` is what ends that occurrence: left behind, the snooze would
+        // pin the alert to a moment in the past forever and it would never
+        // fire again (pre-alerts spec). Only a *changed* due moment clears
+        // them — re-saving the same time must not throw a snooze away.
+        if (! $previousDueAt->equalTo(CarbonImmutable::instance($attributes['due_at'])->utc())) {
+            $reminder->clearAlertSnoozes();
+        }
+
+        $this->syncAlerts($reminder, $request->alertOffsets());
+
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Reminder updated.')]);
 
         return $this->backToList();
+    }
+
+    /**
+     * Bring a reminder's pre-alerts in line with the horizons the form posted.
+     *
+     * Deliberately not `sync()`-by-recreation: an offset that is still ticked
+     * keeps its **existing row**, and therefore its `snoozed_until`. Deleting
+     * and reinserting would silently un-snooze every alert on every save, and
+     * would mint new ids that any already-sent push's action URL no longer
+     * matches.
+     *
+     * @param  list<int>  $offsets
+     */
+    private function syncAlerts(Reminder $reminder, array $offsets): void
+    {
+        // whereNotIn against an empty list is "all of them", which is exactly
+        // right: nothing ticked means no alerts.
+        $reminder->alerts()->whereNotIn('offset_minutes', $offsets)->delete();
+
+        /** @var list<int> $existing */
+        $existing = $reminder->alerts()->pluck('offset_minutes')->all();
+
+        foreach (array_diff($offsets, $existing) as $offset) {
+            $reminder->alerts()->create(['offset_minutes' => $offset]);
+        }
+
+        $reminder->unsetRelation('alerts');
     }
 
     /**

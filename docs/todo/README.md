@@ -37,3 +37,10 @@ specs are independent and can go to parallel sub-agents.
 | ~~settings-and-quiet-hours~~ | ✅ Shipped 2026-08-03 → [../shipped/settings-and-quiet-hours.md](../shipped/settings-and-quiet-hours.md) | |
 | [deployment-https.md](deployment-https.md) | Serve over HTTPS on the mini-PC so push works in production | push-notifications |
 | ~~scriptable-widget~~ | ✅ Shipped 2026-08-03 → [../shipped/scriptable-widget.md](../shipped/scriptable-widget.md) — E2E blocked on deployment-https | |
+
+## Phase 5 — Alerting refinements
+
+| Doc | Feature | Depends on |
+|---|---|---|
+| ~~pre-alerts~~ | ✅ Shipped 2026-08-19 → [../shipped/pre-alerts.md](../shipped/pre-alerts.md) | |
+| ~~auto-complete-on-dispatch~~ | ✅ Shipped 2026-08-19 → [../shipped/auto-complete-on-dispatch.md](../shipped/auto-complete-on-dispatch.md) | |

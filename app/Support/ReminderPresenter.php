@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Reminder;
+use App\Models\ReminderAlert;
 use App\Models\ReminderList;
 use App\Models\User;
 use Carbon\CarbonInterface;
@@ -124,6 +125,8 @@ final class ReminderPresenter
      *     repeat_until: string|null,
      *     repeat_month_mode: string|null,
      *     repeat_week_of_month: int|null,
+     *     auto_complete: bool,
+     *     alerts: list<array{id: int, offset_minutes: int, label: string, is_snoozed: bool, snooze_label: string|null}>,
      * }
      */
     public function present(Reminder $reminder, ?User $viewer = null): array
@@ -191,7 +194,48 @@ final class ReminderPresenter
             'repeat_until' => $reminder->repeat_until?->format('Y-m-d'),
             'repeat_month_mode' => $reminder->repeat_month_mode,
             'repeat_week_of_month' => $reminder->repeat_week_of_month,
+            // Part of the rule as far as the form is concerned, so the edit
+            // sheet's checkbox reopens on what was saved. Never true without
+            // a rule — ReminderRequest normalises a one-off back to false.
+            'auto_complete' => $reminder->auto_complete,
+            // The pre-alerts on this reminder, nearest horizon first. Empty
+            // for the vast majority of rows, which is what the bell glyph
+            // keys off (pre-alerts spec).
+            'alerts' => $this->alerts($reminder),
         ];
+    }
+
+    /**
+     * A reminder's pre-alerts, as the form's chips and a row's bell tooltip
+     * both read them.
+     *
+     * Ordered by horizon — the relation orders itself, and re-sorting here
+     * keeps that true even for a collection assembled some other way.
+     *
+     * @return list<array{id: int, offset_minutes: int, label: string, is_snoozed: bool, snooze_label: string|null}>
+     */
+    private function alerts(Reminder $reminder): array
+    {
+        return array_values($reminder->alerts
+            ->sortBy('offset_minutes')
+            ->map(function (ReminderAlert $alert): array {
+                // Same rule as a reminder's own badge: a snooze that has
+                // already expired is not a snooze, it is an alert about to
+                // fire, so only a future one is badged.
+                $snoozedUntil = $alert->snoozed_until;
+                $active = $snoozedUntil?->isFuture() === true ? $snoozedUntil : null;
+
+                return [
+                    'id' => $alert->id,
+                    'offset_minutes' => $alert->offset_minutes,
+                    'label' => $alert->label(),
+                    'is_snoozed' => $active !== null,
+                    'snooze_label' => $active === null
+                        ? null
+                        : 'Snoozed until '.$this->label($active),
+                ];
+            })
+            ->all());
     }
 
     /**
@@ -215,6 +259,9 @@ final class ReminderPresenter
      *     repeat_until: string|null,
      *     repeat_month_mode: string|null,
      *     repeat_week_of_month: int|null,
+     *     auto_complete: bool,
+     *     alerts: list<int>,
+     *     alert_offsets: list<array{value: int, label: string}>,
      * }
      */
     public function formDefaults(User $user): array
@@ -240,6 +287,21 @@ final class ReminderPresenter
             'repeat_until' => null,
             'repeat_month_mode' => null,
             'repeat_week_of_month' => null,
+            // A new repeating reminder waits to be completed, like every
+            // other one, until the user says otherwise.
+            'auto_complete' => false,
+            // New reminders get no pre-alerts until the user ticks one.
+            'alerts' => [],
+            // Every horizon the picker offers, pre-labelled — the client
+            // renders these strings, it never assembles "1 hour before"
+            // itself.
+            'alert_offsets' => array_map(
+                fn (int $minutes): array => [
+                    'value' => $minutes,
+                    'label' => ReminderAlert::offsetLabel($minutes),
+                ],
+                ReminderAlert::OFFSETS,
+            ),
         ];
     }
 

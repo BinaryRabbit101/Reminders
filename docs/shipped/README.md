@@ -1,6 +1,6 @@
 # Shipped
 
-**Status:** ✅ **12 features shipped — updated 2026-08-03**
+**Status:** ✅ **14 features shipped — updated 2026-08-19**
 
 Specs are moved here from [../todo/](../todo/) when implemented. Each entry gets a ✅
 status line, the ship date, and a close-out section covering deviations from the spec and
@@ -20,3 +20,5 @@ status line, the ship date, and a close-out section covering deviations from the
 | [notification-history.md](notification-history.md) | `/history` feed, unread badge, 90-day prune | ✅ 2026-08-03 | Unread count shared as a closure — resolves post-controller; scoped to ReminderDueNotification. |
 | [settings-and-quiet-hours.md](settings-and-quiet-hours.md) | Per-user timezone/default-time, quiet hours + held pushes | ✅ 2026-08-03 | Quiet hours delay the push channel only; `held_pushes` drained by the same command. |
 | [scriptable-widget.md](scriptable-widget.md) | Per-user token feed + `reminders.js` iOS widget | ✅ 2026-08-03 | Constant-time token scan; widget CONFIG needs port+token after deployment. |
+| [pre-alerts.md](pre-alerts.md) | Snoozable "1 h / 1 day before" alerts with their own dispatch log | ✅ 2026-08-19 | Alerts anchor to raw `due_at`; alert snoozes cleared on advance/due edit; skip-without-claim gate is load-bearing. |
+| [auto-complete-on-dispatch.md](auto-complete-on-dispatch.md) | Opt-in: recurring reminders advance at dispatch instead of parking in Overdue | ✅ 2026-08-19 | The one exception to the 2026-08-07 recurrence amendment; advance hangs off the claim; no completion row. |

@@ -28,14 +28,16 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $user_id
  * @property int $reminder_id
+ * @property int|null $reminder_alert_id
  * @property Carbon $occurred_at
  * @property Carbon $release_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read User|null $user
  * @property-read Reminder|null $reminder
+ * @property-read ReminderAlert|null $alert
  */
-#[Fillable(['user_id', 'reminder_id', 'occurred_at', 'release_at'])]
+#[Fillable(['user_id', 'reminder_id', 'reminder_alert_id', 'occurred_at', 'release_at'])]
 class HeldPush extends Model
 {
     /**
@@ -73,6 +75,31 @@ class HeldPush extends Model
     }
 
     /**
+     * The pre-alert this push is about, when it is one — null for an ordinary
+     * "your reminder is due" push, which is every row written before
+     * pre-alerts shipped.
+     *
+     * There is **no foreign key** behind this column (SQLite cannot add one
+     * to an existing table — ARCHITECTURE.md §5), so a dangling id is
+     * possible in principle and {@see isSuperseded()} treats it as a reason to
+     * drop the push rather than a reason to crash.
+     *
+     * @return BelongsTo<ReminderAlert, $this>
+     */
+    public function alert(): BelongsTo
+    {
+        return $this->belongsTo(ReminderAlert::class, 'reminder_alert_id');
+    }
+
+    /**
+     * Whether this held push is a pre-alert rather than a reminder coming due.
+     */
+    public function isPreAlert(): bool
+    {
+        return $this->reminder_alert_id !== null;
+    }
+
+    /**
      * Whether this held push has been overtaken by events and should be
      * dropped rather than delivered when its window ends.
      *
@@ -93,6 +120,10 @@ class HeldPush extends Model
      */
     public function isSuperseded(): bool
     {
+        if ($this->isPreAlert()) {
+            return $this->isPreAlertSuperseded();
+        }
+
         $reminder = $this->reminder;
 
         if (! $reminder instanceof Reminder) {
@@ -108,6 +139,47 @@ class HeldPush extends Model
         return $snoozed !== null
             && CarbonImmutable::instance($snoozed)->utc()
                 ->greaterThan(CarbonImmutable::instance($this->occurred_at)->utc());
+    }
+
+    /**
+     * The pre-alert half of {@see isSuperseded()}.
+     *
+     * Four ways a held pre-alert stops being worth buzzing about:
+     *
+     * - The **alert row is gone** — unfiled from the reminder overnight, or
+     *   taken with a deleted reminder. Nothing behind it to alert about.
+     * - The **reminder is completed** — dealt with during the night, so a
+     *   nudge that it is coming is noise.
+     * - The alert's current `effectiveFireAt()` **no longer equals** the
+     *   moment held. Snoozing the alert, or editing the reminder's due time,
+     *   mints a fresh fire moment that will push on its own; releasing this
+     *   one too would buzz twice.
+     * - The fire moment is **no longer strictly before** the reminder's
+     *   effective due moment. Pushing `due_at` earlier (or snoozing the alert
+     *   past it) makes the pre-alert redundant — the main notification is
+     *   coming, and it is the one that matters.
+     */
+    private function isPreAlertSuperseded(): bool
+    {
+        $alert = $this->alert;
+
+        if (! $alert instanceof ReminderAlert) {
+            return true;
+        }
+
+        $reminder = $alert->reminder;
+
+        if (! $reminder instanceof Reminder || $reminder->completed_at !== null) {
+            return true;
+        }
+
+        $fireAt = $alert->effectiveFireAt();
+
+        if (! $fireAt->equalTo(CarbonImmutable::instance($this->occurred_at)->utc())) {
+            return true;
+        }
+
+        return ! $fireAt->lessThan($reminder->effectiveDueAt());
     }
 
     /**

@@ -123,6 +123,9 @@ final class TodayBoard
             ->with([
                 'user',
                 'list',
+                // The bell glyph a row draws when it has pre-alerts, without
+                // a query per row.
+                'alerts',
                 // Scoped to the viewer so the presenter's listFor() can read
                 // this user's own filing state with no extra query per row.
                 'filings' => fn ($query) => $query->where('user_id', $user->id)->with('list'),

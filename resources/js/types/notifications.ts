@@ -9,6 +9,13 @@ export type HistoryEntry = {
     id: string;
     /** Whether this row is a push that went out, or a completion log entry. */
     type: 'sent' | 'completed';
+    /**
+     * Which kind of push this was. `'pre_alert'` is an "an hour before"
+     * nudge; `null` is a due notification — including every entry written
+     * before pre-alerts shipped, which is why absence rather than a value is
+     * the default (`NotificationHistory::entry()`).
+     */
+    kind: 'pre_alert' | null;
     /** The title as it was sent/completed, which may differ from the reminder's now. */
     title: string;
     /** "9:00 AM" — when this entry's event happened, on the local clock. */

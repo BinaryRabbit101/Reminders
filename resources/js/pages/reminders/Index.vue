@@ -11,6 +11,7 @@ import {
 import { computed, ref } from 'vue';
 import ReminderController from '@/actions/App/Http/Controllers/ReminderController';
 import ReminderListController from '@/actions/App/Http/Controllers/ReminderListController';
+import AlertsBadge from '@/components/AlertsBadge.vue';
 import ListBadge from '@/components/ListBadge.vue';
 import RecurrenceBadge from '@/components/RecurrenceBadge.vue';
 import ReminderCompleteToggle from '@/components/ReminderCompleteToggle.vue';
@@ -349,6 +350,7 @@ function isOverdue(reminder: Reminder): boolean {
                     <SnoozedBadge :reminder="reminder" />
                     <SharedReminderBadge :reminder="reminder" />
                     <RecurrenceBadge :reminder="reminder" />
+                    <AlertsBadge :reminder="reminder" />
                 </div>
 
                 <div class="flex shrink-0 items-center">

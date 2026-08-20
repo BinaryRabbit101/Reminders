@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import { CircleCheckBig, Inbox, Trash2 } from '@lucide/vue';
+import { Bell, CircleCheckBig, Inbox, Trash2 } from '@lucide/vue';
 import { ref } from 'vue';
 import ReminderFormSheet from '@/components/ReminderFormSheet.vue';
 import { history as historyRoute } from '@/routes';
@@ -143,6 +143,23 @@ function openEdit(entry: HistoryEntry): void {
                                     class="mt-1.5 size-2 shrink-0 rounded-full bg-primary"
                                     aria-hidden="true"
                                 ></span>
+                                <!-- A pre-alert row: the same bell the list
+                                     surfaces mark an alerting reminder with.
+                                     What it was is already spelled out in
+                                     `due_label` ("Alerted 1 hour before …"),
+                                     so this is a glyph and nothing more. -->
+                                <Bell
+                                    v-if="entry.kind === 'pre_alert'"
+                                    class="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+                                    aria-hidden="true"
+                                    data-test="history-pre-alert-glyph"
+                                />
+                                <span
+                                    v-if="entry.kind === 'pre_alert'"
+                                    class="sr-only"
+                                >
+                                    (alert)
+                                </span>
                                 <span class="min-w-0 flex-1">
                                     {{ entry.title }}
                                 </span>
