@@ -290,75 +290,80 @@ function isOverdue(reminder: Reminder): boolean {
             <li
                 v-for="reminder in reminders"
                 :key="reminder.id"
-                class="flex items-start gap-1 rounded-xl border border-sidebar-border/70 p-2 shadow-sm transition-shadow hover:shadow-md dark:border-sidebar-border"
+                class="flex flex-col rounded-xl border border-sidebar-border/70 p-2 shadow-sm transition-shadow hover:shadow-md dark:border-sidebar-border"
                 :class="{ 'opacity-60': reminder.is_completed }"
             >
-                <ReminderCompleteToggle :reminder="reminder" />
+                <div class="flex items-start gap-1">
+                    <ReminderCompleteToggle :reminder="reminder" />
 
-                <div class="min-w-0 flex-1 px-1 py-1.5">
-                    <p
-                        class="font-medium break-words"
-                        :class="{ 'line-through': reminder.is_completed }"
-                    >
-                        {{ reminder.title }}
-                    </p>
-                    <p
-                        class="text-sm"
-                        :class="
-                            isOverdue(reminder)
-                                ? 'text-red-600 dark:text-red-500'
-                                : 'text-muted-foreground'
-                        "
-                    >
-                        <span>{{ reminder.due_relative }}</span>
-                        <span aria-hidden="true"> &middot; </span>
-                        <span>{{ reminder.due_label }}</span>
-                    </p>
-                    <ReminderNotes
-                        v-if="reminder.notes"
-                        :notes="reminder.notes"
-                    />
-                    <ListBadge :reminder="reminder" />
-                    <button
-                        v-if="reminder.list"
-                        type="button"
-                        class="me-1 mt-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-                        :aria-label="`Remove ${reminder.title} from ${reminder.list.name}`"
-                        :disabled="removingListFrom === reminder.id"
-                        data-test="remove-from-list-button"
-                        @click="removeFromList(reminder)"
-                    >
-                        <FolderX class="size-3" aria-hidden="true" />
-                    </button>
-                    <SnoozedBadge :reminder="reminder" />
-                    <SharedReminderBadge :reminder="reminder" />
-                    <RecurrenceBadge :reminder="reminder" />
-                    <AlertsBadge :reminder="reminder" />
-                    <SilencedBadge :reminder="reminder" />
+                    <div class="min-w-0 flex-1 px-1 py-1.5">
+                        <p
+                            class="font-medium break-words"
+                            :class="{ 'line-through': reminder.is_completed }"
+                        >
+                            {{ reminder.title }}
+                        </p>
+                        <p
+                            class="text-sm"
+                            :class="
+                                isOverdue(reminder)
+                                    ? 'text-red-600 dark:text-red-500'
+                                    : 'text-muted-foreground'
+                            "
+                        >
+                            <span>{{ reminder.due_relative }}</span>
+                            <span aria-hidden="true"> &middot; </span>
+                            <span>{{ reminder.due_label }}</span>
+                        </p>
+                        <ListBadge :reminder="reminder" />
+                        <button
+                            v-if="reminder.list"
+                            type="button"
+                            class="me-1 mt-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                            :aria-label="`Remove ${reminder.title} from ${reminder.list.name}`"
+                            :disabled="removingListFrom === reminder.id"
+                            data-test="remove-from-list-button"
+                            @click="removeFromList(reminder)"
+                        >
+                            <FolderX class="size-3" aria-hidden="true" />
+                        </button>
+                        <SnoozedBadge :reminder="reminder" />
+                        <SharedReminderBadge :reminder="reminder" />
+                        <RecurrenceBadge :reminder="reminder" />
+                        <AlertsBadge :reminder="reminder" />
+                        <SilencedBadge :reminder="reminder" />
+                    </div>
+
+                    <div class="flex shrink-0 items-center">
+                        <ReminderSnoozeMenu
+                            v-if="!reminder.is_completed"
+                            :reminder="reminder"
+                        />
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            :aria-label="`Edit ${reminder.title}`"
+                            @click="openEdit(reminder)"
+                        >
+                            <Pencil />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            :aria-label="`Delete ${reminder.title}`"
+                            @click="deleting = reminder"
+                        >
+                            <Trash2 />
+                        </Button>
+                    </div>
                 </div>
 
-                <div class="flex shrink-0 items-center">
-                    <ReminderSnoozeMenu
-                        v-if="!reminder.is_completed"
-                        :reminder="reminder"
-                    />
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        :aria-label="`Edit ${reminder.title}`"
-                        @click="openEdit(reminder)"
-                    >
-                        <Pencil />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        :aria-label="`Delete ${reminder.title}`"
-                        @click="deleting = reminder"
-                    >
-                        <Trash2 />
-                    </Button>
-                </div>
+                <!-- Full-width notes row; see ReminderNotes for why. -->
+                <ReminderNotes
+                    v-if="reminder.notes"
+                    :notes="reminder.notes"
+                    :overdue="isOverdue(reminder)"
+                />
             </li>
         </ul>
     </div>

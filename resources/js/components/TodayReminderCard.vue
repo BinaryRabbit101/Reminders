@@ -39,19 +39,19 @@ defineEmits<{
 
 <template>
     <li
-        class="flex items-start gap-1 rounded-xl border p-2 shadow-sm transition-shadow hover:shadow-md"
+        class="flex flex-col rounded-xl border p-2 shadow-sm transition-shadow hover:shadow-md"
         :class="
             overdue
                 ? 'border-destructive/40 bg-destructive/5'
                 : 'border-sidebar-border/70 dark:border-sidebar-border'
         "
     >
-        <ReminderCompleteToggle :reminder="reminder" />
+        <div class="flex items-start gap-1">
+            <ReminderCompleteToggle :reminder="reminder" />
 
-        <div class="min-w-0 flex-1">
             <button
                 type="button"
-                class="flex w-full items-start gap-3 rounded-lg px-1 py-1.5 text-left transition-colors"
+                class="flex min-w-0 flex-1 items-start gap-3 rounded-lg px-1 py-1.5 text-left transition-colors"
                 :class="overdue ? 'hover:bg-destructive/10' : 'hover:bg-accent'"
                 :aria-label="`Edit ${reminder.title}`"
                 @click="$emit('edit', reminder)"
@@ -96,33 +96,35 @@ defineEmits<{
             </button>
 
             <!--
-                Notes live outside the edit button: they clamp with their own
-                Show more toggle, and a button can't nest inside a button.
-                ps-24 = the button's px-1 + w-20 date column + gap-3, so the
-                notes line up under the title.
+                The right-hand action stack, matching the reminders index minus
+                its pencil: editing here is the card itself, so a separate edit
+                button would be a second way to do the same thing.
             -->
-            <div v-if="reminder.notes" class="min-w-0 ps-24 pe-1 pb-1.5">
-                <ReminderNotes :notes="reminder.notes" />
+            <div class="flex shrink-0 items-center">
+                <ReminderSnoozeMenu :reminder="reminder" />
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    class="text-muted-foreground hover:text-foreground"
+                    :aria-label="`Delete ${reminder.title}`"
+                    data-test="delete-reminder-button"
+                    @click="$emit('delete', reminder)"
+                >
+                    <Trash2 />
+                </Button>
             </div>
         </div>
 
         <!--
-            The right-hand action stack, matching the reminders index minus
-            its pencil: editing here is the card itself, so a separate edit
-            button would be a second way to do the same thing.
+            Notes are their own row under the whole card, not a column beside
+            the date: prose needs the full width to read, and the row above
+            has no spare horizontal space once the date and actions are in.
+            Outside the edit button too — a button can't nest in a button.
         -->
-        <div class="flex shrink-0 items-center">
-            <ReminderSnoozeMenu :reminder="reminder" />
-            <Button
-                variant="ghost"
-                size="icon"
-                class="text-muted-foreground hover:text-foreground"
-                :aria-label="`Delete ${reminder.title}`"
-                data-test="delete-reminder-button"
-                @click="$emit('delete', reminder)"
-            >
-                <Trash2 />
-            </Button>
-        </div>
+        <ReminderNotes
+            v-if="reminder.notes"
+            :notes="reminder.notes"
+            :overdue="overdue"
+        />
     </li>
 </template>

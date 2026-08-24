@@ -76,6 +76,45 @@ class ReminderNotesTest extends DuskTestCase
         });
     }
 
+    public function test_notes_span_the_full_card_width_as_their_own_row()
+    {
+        $user = User::factory()->create();
+        Reminder::factory()->for($user)->create([
+            'title' => 'Decide on the subscription',
+            'due_at' => Carbon::now()->addHours(2),
+            'notes' => self::LONG_NOTES,
+        ]);
+
+        $this->browse(function (Browser $browser) use ($user) {
+            $browser->loginAs($user)->visit('/today');
+
+            $this->emulateMobileViewport($browser);
+
+            $browser->pause(300)->waitFor('[data-test="reminder-notes-row"]');
+
+            // The notes row must be a sibling row under the whole card, not a
+            // column squeezed between the date and the action buttons: at
+            // 375px that difference is ~96px of reading width per line.
+            $measured = $browser->script(
+                'const row = document.querySelector(\'[data-test="reminder-notes-row"]\');'
+                .'const card = row.closest("li");'
+                .'const cardStyle = getComputedStyle(card);'
+                .'const inner = card.clientWidth'
+                .' - parseFloat(cardStyle.paddingLeft) - parseFloat(cardStyle.paddingRight);'
+                .'return [row.getBoundingClientRect().width, inner];'
+            )[0];
+
+            [$rowWidth, $cardInnerWidth] = $measured;
+
+            $this->assertEqualsWithDelta(
+                $cardInnerWidth,
+                $rowWidth,
+                2.0,
+                'The notes row should span the card\'s full inner width.',
+            );
+        });
+    }
+
     public function test_short_notes_render_without_a_toggle()
     {
         $user = User::factory()->create();

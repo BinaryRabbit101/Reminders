@@ -2,14 +2,23 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 
 /**
- * A reminder's notes, clamped to three lines so a long description can't
- * swallow the whole card. Nothing is cut: when the clamp actually hides
- * text, a Show more / Show less toggle reveals the full notes in place.
- * Overflow is measured live (mount + element resize) so the toggle only
- * appears when there is genuinely more to show, and stays honest through
- * viewport changes like phone rotation.
+ * A reminder's notes, as a full-width row across the bottom of the card —
+ * prose reads badly in the narrow column left over beside the date and the
+ * action buttons, so it gets the whole width and a hairline rule to sit
+ * under.
+ *
+ * The text clamps to three lines so a long description can't swallow the
+ * card. Nothing is cut: when the clamp actually hides text, a Show more /
+ * Show less toggle reveals the full notes in place. Overflow is measured
+ * live (mount + element resize) so the toggle only appears when there is
+ * genuinely more to show, and stays honest through viewport changes like
+ * phone rotation.
  */
-const { notes } = defineProps<{ notes: string }>();
+const { notes, overdue = false } = defineProps<{
+    notes: string;
+    /** Matches the card's destructive tint so the rule doesn't read as grey-on-red. */
+    overdue?: boolean;
+}>();
 
 const body = ref<HTMLElement | null>(null);
 const expanded = ref(false);
@@ -36,7 +45,11 @@ onBeforeUnmount(() => observer?.disconnect());
 </script>
 
 <template>
-    <div class="mt-1 min-w-0 text-sm text-muted-foreground">
+    <div
+        class="mt-1.5 w-full min-w-0 border-t px-1 pt-1.5 text-sm text-muted-foreground"
+        :class="overdue ? 'border-destructive/25' : 'border-border/60'"
+        data-test="reminder-notes-row"
+    >
         <p
             ref="body"
             class="break-words"
