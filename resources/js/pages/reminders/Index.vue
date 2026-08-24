@@ -18,6 +18,7 @@ import ReminderCompleteToggle from '@/components/ReminderCompleteToggle.vue';
 import ReminderFormSheet from '@/components/ReminderFormSheet.vue';
 import ReminderSnoozeMenu from '@/components/ReminderSnoozeMenu.vue';
 import SharedReminderBadge from '@/components/SharedReminderBadge.vue';
+import SilencedBadge from '@/components/SilencedBadge.vue';
 import SnoozedBadge from '@/components/SnoozedBadge.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -351,6 +352,7 @@ function isOverdue(reminder: Reminder): boolean {
                     <SharedReminderBadge :reminder="reminder" />
                     <RecurrenceBadge :reminder="reminder" />
                     <AlertsBadge :reminder="reminder" />
+                    <SilencedBadge :reminder="reminder" />
                 </div>
 
                 <div class="flex shrink-0 items-center">

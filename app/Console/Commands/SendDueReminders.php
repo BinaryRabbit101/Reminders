@@ -15,6 +15,9 @@ use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\UniqueConstraintViolationException;
+// The base class both reminder notifications extend. Aliased because the
+// unqualified `Notification` in this file is the facade that sends them.
+use Illuminate\Notifications\Notification as BaseNotification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
 
@@ -44,6 +47,13 @@ use Illuminate\Support\Facades\Notification;
  * Per recipient, deliberately. Two household members share one reminder but
  * not one bedtime, so the same occurrence can be loud for one of them and held
  * for the other — while remaining a single claim and a single dispatch row.
+ *
+ * SILENCE sits in the same place and answers a different question. Quiet hours
+ * ask *when* a push may land; `reminders.is_silenced` says there is no push to
+ * land at all, for anybody, so it short-circuits ahead of the split and
+ * nothing is held ({@see notifySilently()}). It is the reminder's property
+ * rather than the recipient's — a shared silenced reminder is silent for the
+ * whole household — and it covers that reminder's pre-alerts too.
  *
  * A SECOND PASS follows the main one, for pre-alerts (pre-alerts spec): the
  * same claim-first-send-second machinery against `reminder_alert_dispatches`,
@@ -274,6 +284,14 @@ class SendDueReminders extends Command
      */
     private function notify(Reminder $reminder, CarbonImmutable $occurredAt, CarbonImmutable $now): int
     {
+        if ($reminder->is_silenced) {
+            return $this->notifySilently($reminder, new ReminderDueNotification(
+                $reminder,
+                $occurredAt,
+                ReminderDueNotification::CHANNELS_IN_APP,
+            ));
+        }
+
         ['loud' => $loud, 'quiet' => $quiet, 'releases' => $releases] = $this->splitByQuietHours($reminder, $now);
 
         if ($loud !== []) {
@@ -319,6 +337,19 @@ class SendDueReminders extends Command
         CarbonImmutable $fireAt,
         CarbonImmutable $now,
     ): int {
+        // A heads-up about a silenced reminder is silenced with it: the
+        // toggle is a statement about this reminder's whole delivery, and a
+        // "due in 1 hour" buzz for something that will then go off in silence
+        // would be the loudest part of a reminder the user asked to keep
+        // quiet.
+        if ($reminder->is_silenced) {
+            return $this->notifySilently($reminder, new ReminderPreAlertNotification(
+                $alert,
+                $fireAt,
+                ReminderPreAlertNotification::CHANNELS_IN_APP,
+            ));
+        }
+
         ['loud' => $loud, 'quiet' => $quiet, 'releases' => $releases] = $this->splitByQuietHours($reminder, $now);
 
         if ($loud !== []) {
@@ -344,6 +375,34 @@ class SendDueReminders extends Command
         }
 
         return $held;
+    }
+
+    /**
+     * Deliver the in-app half to everyone and stop — the whole of what a
+     * silenced reminder does (silenced-reminders spec).
+     *
+     * Quiet hours are never consulted, because there is nothing left for them
+     * to decide: they exist to choose *when* a push lands, and this reminder
+     * has no push. Nothing is held either, which is the point — a held row is
+     * a promise to buzz later, and the promise here is never.
+     *
+     * Deliberately sits *inside* the send step, like quiet hours do. Claiming
+     * and stale-suppression are untouched: a silenced occurrence is claimed,
+     * marked sent, and (if the owner asked for it) auto-completed exactly as a
+     * loud one is. The only thing that changes is which channels carry it.
+     *
+     * Silence is the reminder's property, not the recipient's, so a shared
+     * reminder is silent for the whole household — the toggle belongs to the
+     * thing, the way `is_shared` does, not to whoever is looking at it.
+     *
+     * Returns zero always, so it can be `return`ed straight out of the
+     * held-push accounting its callers do.
+     */
+    private function notifySilently(Reminder $reminder, BaseNotification $notification): int
+    {
+        Notification::send($reminder->recipients(), $notification);
+
+        return 0;
     }
 
     /**

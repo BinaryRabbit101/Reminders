@@ -90,6 +90,10 @@ class ReminderRequest extends FormRequest
             // back to false in recurrenceAttributes() rather than rejected,
             // because an unticked checkbox posts nothing either way.
             'auto_complete' => ['nullable', 'boolean'],
+            // Meaningful on any reminder, one-off or repeating, so unlike
+            // `auto_complete` it is shaped in reminderAttributes() alongside
+            // `is_shared` rather than with the repeat rule.
+            'is_silenced' => ['nullable', 'boolean'],
             // The pre-alert chips, posted as `alerts[]` offsets in minutes.
             // A closed allow-list rather than a free number: it is the same
             // set the picker offers, and it is what keeps a "0 minutes
@@ -110,6 +114,7 @@ class ReminderRequest extends FormRequest
             'due_date' => 'due date',
             'due_time' => 'due time',
             'is_shared' => 'sharing',
+            'is_silenced' => 'silence',
             'list_id' => 'list',
             'repeat_unit' => 'repeat',
             'repeat_interval' => 'repeat interval',
@@ -171,6 +176,7 @@ class ReminderRequest extends FormRequest
      *     notes: string|null,
      *     due_at: Carbon,
      *     is_shared: bool,
+     *     is_silenced: bool,
      *     list_id?: int|null,
      *     repeat_unit: string|null,
      *     repeat_interval: int,
@@ -200,6 +206,12 @@ class ReminderRequest extends FormRequest
             'notes' => $this->filled('notes') ? (string) $this->validated('notes') : null,
             'due_at' => $local->copy()->utc(),
             'is_shared' => $this->boolean('is_shared') && $this->user()?->household_id !== null,
+            // Read with `boolean()` for the reason `is_shared` is: an unticked
+            // checkbox posts nothing at all, so "absent" has to mean "off" or
+            // un-silencing from the edit sheet would never take. Unlike
+            // `auto_complete` there is nothing to normalise — a one-off is as
+            // silenceable as a series.
+            'is_silenced' => $this->boolean('is_silenced'),
             ...$this->listAttributes(),
             ...$this->recurrenceAttributes($local),
         ];

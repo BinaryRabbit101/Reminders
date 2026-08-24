@@ -30,6 +30,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('reminders/{reminder}/complete', [ReminderActionController::class, 'complete'])->name('reminders.complete');
     Route::post('reminders/{reminder}/snooze', [ReminderActionController::class, 'snooze'])->name('reminders.snooze');
     Route::post('reminders/{reminder}/restore', [ReminderActionController::class, 'restore'])->name('reminders.restore');
+    // The one-tap twin of the edit sheet's silence checkbox, from the row's
+    // snooze menu. No signed version: silencing is not something a push
+    // notification offers, and it would outlive the occurrence that carried
+    // the link.
+    Route::post('reminders/{reminder}/silence', [ReminderActionController::class, 'silence'])->name('reminders.silence');
 
     // Snoozing a *pre-alert* rather than the reminder itself. Scoped
     // bindings, so an alert that belongs to another reminder is a 404 before

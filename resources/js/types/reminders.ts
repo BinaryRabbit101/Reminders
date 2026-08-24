@@ -172,6 +172,12 @@ export type Reminder = {
      */
     auto_complete: boolean;
     /**
+     * Whether this reminder is delivered without a push notification — the
+     * in-app record and the Today board are unchanged, no phone buzzes, and
+     * its pre-alerts are silent with it. Draws the crossed-out bell glyph.
+     */
+    is_silenced: boolean;
+    /**
      * The pre-alerts set on this reminder, nearest horizon first. Empty for
      * most rows — which is exactly what the bell glyph keys off.
      */
@@ -204,6 +210,8 @@ export type ReminderFormDefaults = {
     due_time: string;
     /** New reminders are private until the user says otherwise. */
     is_shared: boolean;
+    /** New reminders buzz, like every existing one does. */
+    is_silenced: boolean;
     /** False when the account has no household — the switch is not rendered. */
     can_share: boolean;
     /** New reminders start unfiled; the select opens on "No list". */

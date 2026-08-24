@@ -25,6 +25,7 @@ use Illuminate\Support\Collection;
  * @property string|null $notes
  * @property Carbon $due_at
  * @property bool $is_shared
+ * @property bool $is_silenced
  * @property string|null $repeat_unit
  * @property int $repeat_interval
  * @property list<int>|null $repeat_weekdays
@@ -41,7 +42,7 @@ use Illuminate\Support\Collection;
  * @property-read ReminderList|null $list
  */
 #[Fillable([
-    'user_id', 'list_id', 'title', 'notes', 'due_at', 'is_shared',
+    'user_id', 'list_id', 'title', 'notes', 'due_at', 'is_shared', 'is_silenced',
     'repeat_unit', 'repeat_interval', 'repeat_weekdays', 'repeat_until', 'repeat_anchor_day',
     'repeat_month_mode', 'repeat_week_of_month', 'auto_complete',
     'completed_at', 'snoozed_until',
@@ -70,6 +71,11 @@ class Reminder extends Model
             'completed_at' => 'datetime',
             'snoozed_until' => 'datetime',
             'is_shared' => 'boolean',
+            // The push half of delivery, switched off. Never the in-app half:
+            // a silenced reminder is still claimed, still dispatched, and
+            // still lands in the notification history and on the unread badge
+            // — it just never buzzes a phone (silenced-reminders spec).
+            'is_silenced' => 'boolean',
             'repeat_interval' => 'integer',
             'repeat_weekdays' => 'array',
             // A local calendar day, not an instant: only ever read through
@@ -420,6 +426,28 @@ class Reminder extends Model
         $this->forceFill([
             'snoozed_until' => CarbonImmutable::instance($until)->utc(),
         ])->save();
+    }
+
+    /**
+     * Turn this reminder's push notifications off, or back on — returning
+     * whether it is silent now.
+     *
+     * A toggle rather than a setter because there is no third state and the
+     * only caller is a menu item that reads its label off the same column: a
+     * "set it to the opposite" write cannot get out of step with what the row
+     * was showing, whereas "set it to false" posted from a stale row can.
+     *
+     * Nothing else moves. Silence is a statement about channels, so the
+     * occurrence, the series and the snooze are all left exactly where they
+     * were (silenced-reminders spec) — including, deliberately, an occurrence
+     * that has already been claimed and sent. Silencing after the fact does
+     * not un-ring a bell; it governs the next one.
+     */
+    public function toggleSilence(): bool
+    {
+        $this->forceFill(['is_silenced' => ! $this->is_silenced])->save();
+
+        return $this->is_silenced;
     }
 
     /**

@@ -108,6 +108,9 @@ class HeldPush extends Model
      * - The reminder is **gone** (deleted out from under a database whose FK
      *   enforcement may be off) — nothing to buzz about.
      * - The reminder is **completed** — it was dealt with during the night.
+     * - The reminder was **silenced** while this sat in the queue. A held
+     *   push is a promise to buzz later; silencing withdraws it, and a row
+     *   written before the toggle was ticked must not outlive it.
      * - The occurrence was **snoozed forward**. A snooze mints a fresh
      *   occurrence that will push on its own, so releasing the old one too
      *   would buzz twice for the same thing.
@@ -130,7 +133,7 @@ class HeldPush extends Model
             return true;
         }
 
-        if ($reminder->completed_at !== null) {
+        if ($reminder->completed_at !== null || $reminder->is_silenced) {
             return true;
         }
 
@@ -150,6 +153,8 @@ class HeldPush extends Model
      *   taken with a deleted reminder. Nothing behind it to alert about.
      * - The **reminder is completed** — dealt with during the night, so a
      *   nudge that it is coming is noise.
+     * - The **reminder was silenced** — a silenced reminder's pre-alerts are
+     *   silenced with it, including one already sitting in the queue.
      * - The alert's current `effectiveFireAt()` **no longer equals** the
      *   moment held. Snoozing the alert, or editing the reminder's due time,
      *   mints a fresh fire moment that will push on its own; releasing this
@@ -169,7 +174,7 @@ class HeldPush extends Model
 
         $reminder = $alert->reminder;
 
-        if (! $reminder instanceof Reminder || $reminder->completed_at !== null) {
+        if (! $reminder instanceof Reminder || $reminder->completed_at !== null || $reminder->is_silenced) {
             return true;
         }
 

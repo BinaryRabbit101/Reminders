@@ -113,6 +113,7 @@ final class ReminderPresenter
      *     is_snoozed: bool,
      *     snooze_label: string|null,
      *     is_shared: bool,
+     *     is_silenced: bool,
      *     is_mine: bool,
      *     owner_label: string|null,
      *     list: array{id: int, name: string, color: string, color_hex: string}|null,
@@ -166,6 +167,10 @@ final class ReminderPresenter
                 ? null
                 : 'Snoozed until '.$this->label($activeSnooze),
             'is_shared' => $reminder->is_shared,
+            // Drives the muted-bell glyph on a row and the edit sheet's
+            // checkbox. A property of the reminder, not the viewer, so a
+            // shared silenced reminder reads silent for everyone.
+            'is_silenced' => $reminder->is_silenced,
             'is_mine' => $isMine,
             // Only somebody else's reminder needs a name on it; the client
             // renders the string, it never assembles one.
@@ -251,6 +256,7 @@ final class ReminderPresenter
      *     due_date: string,
      *     due_time: string,
      *     is_shared: bool,
+     *     is_silenced: bool,
      *     can_share: bool,
      *     list_id: int|null,
      *     repeat_unit: string|null,
@@ -277,6 +283,8 @@ final class ReminderPresenter
             'due_date' => $next->format('Y-m-d'),
             'due_time' => $next->format('H:i'),
             'is_shared' => false,
+            // New reminders buzz, like every existing one does.
+            'is_silenced' => false,
             'can_share' => $user->household_id !== null,
             // New reminders start unfiled; the select opens on "No list".
             'list_id' => null,

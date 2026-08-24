@@ -67,5 +67,21 @@ export function useReminderActions() {
         );
     }
 
-    return { complete, uncomplete, toggleComplete, snooze };
+    /**
+     * Switch this reminder's pushes off, or back on.
+     *
+     * Sends no desired state — the server flips the column. The menu item
+     * reads its label off `is_silenced`, so posting "the opposite of what I
+     * am showing" from a row that has since changed underneath would be the
+     * one way to set it wrong.
+     */
+    function toggleSilence(reminder: Reminder): void {
+        router.post(
+            ReminderActionController.silence(reminder.id).url,
+            {},
+            options,
+        );
+    }
+
+    return { complete, uncomplete, toggleComplete, snooze, toggleSilence };
 }

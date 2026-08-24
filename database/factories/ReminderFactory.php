@@ -25,6 +25,7 @@ class ReminderFactory extends Factory
             'notes' => fake()->boolean(40) ? fake()->sentence(10) : null,
             'due_at' => Carbon::now()->addHours(fake()->numberBetween(1, 240)),
             'is_shared' => false,
+            'is_silenced' => false,
             'repeat_unit' => null,
             'repeat_interval' => 1,
             'repeat_weekdays' => null,
@@ -76,6 +77,18 @@ class ReminderFactory extends Factory
     {
         return $this->state(fn (array $attributes): array => [
             'auto_complete' => true,
+        ]);
+    }
+
+    /**
+     * A reminder that never buzzes a phone: the occurrence still dispatches
+     * and still lands in the notification history, but no web push goes out
+     * — to anybody, this reminder's pre-alerts included.
+     */
+    public function silenced(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'is_silenced' => true,
         ]);
     }
 

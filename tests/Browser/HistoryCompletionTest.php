@@ -18,7 +18,14 @@ class HistoryCompletionTest extends DuskTestCase
             $browser->loginAs($user)
                 ->visit('/reminders')
                 ->click('[data-test="complete-toggle"]')
-                ->pause(700)
+                // Wait on the round trip actually landing rather than on a
+                // fixed pause — under a full-suite load the completion can
+                // outlast any number picked in advance, and navigating away
+                // early is what made this test flaky. The row *leaving* is
+                // the signal: `/reminders` hides completed reminders unless
+                // `show_completed` is on, so there is no ticked toggle left
+                // on the page to wait for.
+                ->waitUntilMissing('[data-test="complete-toggle"]')
                 ->visit('/history')
                 ->waitForText('Renew car registration')
                 ->assertPresent('[data-test="history-completed"]')

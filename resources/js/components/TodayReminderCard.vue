@@ -5,6 +5,7 @@ import RecurrenceBadge from '@/components/RecurrenceBadge.vue';
 import ReminderCompleteToggle from '@/components/ReminderCompleteToggle.vue';
 import ReminderSnoozeMenu from '@/components/ReminderSnoozeMenu.vue';
 import SharedReminderBadge from '@/components/SharedReminderBadge.vue';
+import SilencedBadge from '@/components/SilencedBadge.vue';
 import SnoozedBadge from '@/components/SnoozedBadge.vue';
 import type { Reminder } from '@/types';
 
@@ -80,6 +81,7 @@ defineEmits<{ edit: [reminder: Reminder] }>();
                 <SharedReminderBadge :reminder="reminder" />
                 <RecurrenceBadge :reminder="reminder" />
                 <AlertsBadge :reminder="reminder" />
+                <SilencedBadge :reminder="reminder" />
             </span>
         </button>
 

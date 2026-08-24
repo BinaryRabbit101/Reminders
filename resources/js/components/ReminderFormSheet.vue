@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { Form, router } from '@inertiajs/vue3';
-import { Bell, CheckCheck, ListPlus, Minus, Plus, Users } from '@lucide/vue';
+import {
+    Bell,
+    BellOff,
+    CheckCheck,
+    ListPlus,
+    Minus,
+    Plus,
+    Users,
+} from '@lucide/vue';
 import { computed, nextTick, ref, watch } from 'vue';
 import ReminderController from '@/actions/App/Http/Controllers/ReminderController';
 import ReminderListController from '@/actions/App/Http/Controllers/ReminderListController';
@@ -68,6 +76,7 @@ const initial = computed(() => ({
     due_date: reminder?.due_date ?? defaults.due_date,
     due_time: reminder?.due_time ?? defaults.due_time,
     is_shared: reminder?.is_shared ?? defaults.is_shared,
+    is_silenced: reminder?.is_silenced ?? defaults.is_silenced,
 }));
 
 /** The repeat unit select — "does not repeat" is just another option in it. */
@@ -801,6 +810,43 @@ function submitListDialog(): void {
                             </label>
                         </div>
                         <InputError :message="errors.alerts" />
+                    </div>
+
+                    <!--
+                        Silence. Sits right under the pre-alert chips because
+                        it governs them too, and unlike the auto-complete
+                        toggle above it is always rendered — a one-off is as
+                        silenceable as a series — so it can stay uncontrolled
+                        on `:default-value`, the way `is_shared` does.
+                    -->
+                    <div class="grid gap-2">
+                        <div
+                            class="flex items-start gap-3 rounded-lg border p-3"
+                        >
+                            <Checkbox
+                                id="is_silenced"
+                                name="is_silenced"
+                                value="1"
+                                :default-value="initial.is_silenced"
+                                class="mt-0.5"
+                                data-test="silenced-toggle"
+                            />
+                            <div class="grid gap-1">
+                                <Label
+                                    for="is_silenced"
+                                    class="flex items-center gap-1.5"
+                                >
+                                    <BellOff class="size-3.5 shrink-0" />
+                                    Silence push notifications
+                                </Label>
+                                <p class="text-sm text-muted-foreground">
+                                    No phone buzz for this reminder or its
+                                    alerts. It still shows up on your board and
+                                    in your notification history.
+                                </p>
+                            </div>
+                        </div>
+                        <InputError :message="errors.is_silenced" />
                     </div>
 
                     <!--

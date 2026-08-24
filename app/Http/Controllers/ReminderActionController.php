@@ -85,6 +85,37 @@ class ReminderActionController extends Controller
     }
 
     /**
+     * Silence a reminder's pushes, or let it speak again.
+     *
+     * Lives here, next to snooze, because it is the same kind of thing: an
+     * act on a row rather than an edit of one. The toggle is also reachable
+     * from the edit sheet's checkbox — this is the one-tap version, on the
+     * menu the user already opens to say "not now".
+     *
+     * Authorized as an `update` for the reason {@see restore()} is: it writes
+     * a column the form could reach anyway, so it needs no ability of its
+     * own. Inheriting the household rule is right rather than incidental —
+     * silence belongs to the reminder, not to whoever is looking at it, so
+     * either member switching it off switches it off for both.
+     */
+    public function silence(Reminder $reminder): RedirectResponse
+    {
+        Gate::authorize('update', $reminder);
+
+        $silenced = $reminder->toggleSilence();
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => $silenced ? __('Silenced') : __('Unsilenced'),
+            'description' => $silenced
+                ? __('No push notifications for :title.', ['title' => $reminder->title])
+                : __('Push notifications are back on for :title.', ['title' => $reminder->title]),
+        ]);
+
+        return $this->back();
+    }
+
+    /**
      * Put a reminder back to a state it was in — the Undo action on the
      * completion toast, and the way an already-ticked row is un-ticked.
      *
