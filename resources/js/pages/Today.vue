@@ -10,6 +10,7 @@ import {
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import EnablePushCard from '@/components/EnablePushCard.vue';
+import ReminderDeleteDialog from '@/components/ReminderDeleteDialog.vue';
 import ReminderFormSheet from '@/components/ReminderFormSheet.vue';
 import TodayReminderCard from '@/components/TodayReminderCard.vue';
 import { Button } from '@/components/ui/button';
@@ -46,6 +47,8 @@ defineOptions({
 
 const sheetOpen = ref(false);
 const editing = ref<Reminder | null>(null);
+/** The row awaiting delete confirmation; null closes the dialog. */
+const deleting = ref<Reminder | null>(null);
 
 const upcomingCount = computed(() =>
     board.upcoming.reduce((total, day) => total + day.reminders.length, 0),
@@ -148,6 +151,7 @@ function openEdit(reminder: Reminder): void {
                         :reminder="reminder"
                         overdue
                         @edit="openEdit"
+                        @delete="deleting = $event"
                     />
                 </ul>
             </section>
@@ -176,6 +180,7 @@ function openEdit(reminder: Reminder): void {
                         :reminder="reminder"
                         show-relative
                         @edit="openEdit"
+                        @delete="deleting = $event"
                     />
                 </ul>
 
@@ -208,6 +213,7 @@ function openEdit(reminder: Reminder): void {
                         :key="reminder.id"
                         :reminder="reminder"
                         @edit="openEdit"
+                        @delete="deleting = $event"
                     />
                 </ul>
             </section>
@@ -231,4 +237,6 @@ function openEdit(reminder: Reminder): void {
         :palette="palette"
         :timezone="timezone"
     />
+
+    <ReminderDeleteDialog v-model:reminder="deleting" />
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Trash2 } from '@lucide/vue';
 import AlertsBadge from '@/components/AlertsBadge.vue';
 import ListBadge from '@/components/ListBadge.vue';
 import RecurrenceBadge from '@/components/RecurrenceBadge.vue';
@@ -7,6 +8,7 @@ import ReminderSnoozeMenu from '@/components/ReminderSnoozeMenu.vue';
 import SharedReminderBadge from '@/components/SharedReminderBadge.vue';
 import SilencedBadge from '@/components/SilencedBadge.vue';
 import SnoozedBadge from '@/components/SnoozedBadge.vue';
+import { Button } from '@/components/ui/button';
 import type { Reminder } from '@/types';
 
 /**
@@ -27,7 +29,11 @@ const {
     showRelative?: boolean;
 }>();
 
-defineEmits<{ edit: [reminder: Reminder] }>();
+defineEmits<{
+    edit: [reminder: Reminder];
+    /** Asks the board to open the confirm dialog for this row. */
+    delete: [reminder: Reminder];
+}>();
 </script>
 
 <template>
@@ -85,6 +91,23 @@ defineEmits<{ edit: [reminder: Reminder] }>();
             </span>
         </button>
 
-        <ReminderSnoozeMenu :reminder="reminder" />
+        <!--
+            The right-hand action stack, matching the reminders index minus
+            its pencil: editing here is the card itself, so a separate edit
+            button would be a second way to do the same thing.
+        -->
+        <div class="flex shrink-0 items-center">
+            <ReminderSnoozeMenu :reminder="reminder" />
+            <Button
+                variant="ghost"
+                size="icon"
+                class="text-muted-foreground hover:text-foreground"
+                :aria-label="`Delete ${reminder.title}`"
+                data-test="delete-reminder-button"
+                @click="$emit('delete', reminder)"
+            >
+                <Trash2 />
+            </Button>
+        </div>
     </li>
 </template>

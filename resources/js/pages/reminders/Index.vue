@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Form, Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     BellPlus,
     FolderX,
@@ -9,27 +9,18 @@ import {
     Trash2,
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
-import ReminderController from '@/actions/App/Http/Controllers/ReminderController';
 import ReminderListController from '@/actions/App/Http/Controllers/ReminderListController';
 import AlertsBadge from '@/components/AlertsBadge.vue';
 import ListBadge from '@/components/ListBadge.vue';
 import RecurrenceBadge from '@/components/RecurrenceBadge.vue';
 import ReminderCompleteToggle from '@/components/ReminderCompleteToggle.vue';
+import ReminderDeleteDialog from '@/components/ReminderDeleteDialog.vue';
 import ReminderFormSheet from '@/components/ReminderFormSheet.vue';
 import ReminderSnoozeMenu from '@/components/ReminderSnoozeMenu.vue';
 import SharedReminderBadge from '@/components/SharedReminderBadge.vue';
 import SilencedBadge from '@/components/SilencedBadge.vue';
 import SnoozedBadge from '@/components/SnoozedBadge.vue';
 import { Button } from '@/components/ui/button';
-import {
-    Dialog,
-    DialogClose,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { index as listsIndex } from '@/routes/lists';
@@ -78,16 +69,8 @@ defineOptions({
 
 const sheetOpen = ref(false);
 const editing = ref<Reminder | null>(null);
+/** The row awaiting delete confirmation; null closes the dialog. */
 const deleting = ref<Reminder | null>(null);
-
-const deleteOpen = computed({
-    get: () => deleting.value !== null,
-    set: (value: boolean) => {
-        if (!value) {
-            deleting.value = null;
-        }
-    },
-});
 
 function openCreate(): void {
     editing.value = null;
@@ -390,39 +373,5 @@ function isOverdue(reminder: Reminder): boolean {
         :timezone="timezone"
     />
 
-    <Dialog v-model:open="deleteOpen">
-        <DialogContent v-if="deleting">
-            <DialogHeader class="space-y-3">
-                <DialogTitle>Delete this reminder?</DialogTitle>
-                <DialogDescription>
-                    “{{ deleting.title }}” will be removed permanently. This
-                    cannot be undone.
-                </DialogDescription>
-            </DialogHeader>
-
-            <Form
-                v-bind="ReminderController.destroy.form(deleting.id)"
-                :options="{ preserveScroll: true }"
-                @success="deleting = null"
-                v-slot="{ processing }"
-            >
-                <DialogFooter class="gap-2">
-                    <DialogClose as-child>
-                        <Button variant="secondary" type="button">
-                            Cancel
-                        </Button>
-                    </DialogClose>
-
-                    <Button
-                        type="submit"
-                        variant="destructive"
-                        :disabled="processing"
-                        data-test="confirm-delete-reminder-button"
-                    >
-                        Delete
-                    </Button>
-                </DialogFooter>
-            </Form>
-        </DialogContent>
-    </Dialog>
+    <ReminderDeleteDialog v-model:reminder="deleting" />
 </template>
