@@ -4,6 +4,7 @@ import AlertsBadge from '@/components/AlertsBadge.vue';
 import ListBadge from '@/components/ListBadge.vue';
 import RecurrenceBadge from '@/components/RecurrenceBadge.vue';
 import ReminderCompleteToggle from '@/components/ReminderCompleteToggle.vue';
+import ReminderNotes from '@/components/ReminderNotes.vue';
 import ReminderSnoozeMenu from '@/components/ReminderSnoozeMenu.vue';
 import SharedReminderBadge from '@/components/SharedReminderBadge.vue';
 import SilencedBadge from '@/components/SilencedBadge.vue';
@@ -47,49 +48,63 @@ defineEmits<{
     >
         <ReminderCompleteToggle :reminder="reminder" />
 
-        <button
-            type="button"
-            class="flex min-w-0 flex-1 items-start gap-3 rounded-lg px-1 py-1.5 text-left transition-colors"
-            :class="overdue ? 'hover:bg-destructive/10' : 'hover:bg-accent'"
-            :aria-label="`Edit ${reminder.title}`"
-            @click="$emit('edit', reminder)"
-        >
-            <span
-                class="flex w-20 shrink-0 flex-col gap-0.5 pt-0.5 text-xs font-medium tabular-nums"
-                :class="overdue ? 'text-destructive/80' : 'text-muted-foreground'"
+        <div class="min-w-0 flex-1">
+            <button
+                type="button"
+                class="flex w-full items-start gap-3 rounded-lg px-1 py-1.5 text-left transition-colors"
+                :class="overdue ? 'hover:bg-destructive/10' : 'hover:bg-accent'"
+                :aria-label="`Edit ${reminder.title}`"
+                @click="$emit('edit', reminder)"
             >
-                <span class="uppercase whitespace-nowrap">{{
-                    reminder.due_date_label
-                }}</span>
-                <span class="whitespace-nowrap">{{
-                    reminder.due_time_label
-                }}</span>
-            </span>
-            <span class="min-w-0 flex-1">
-                <span class="block font-medium break-words">
-                    {{ reminder.title }}
-                </span>
                 <span
-                    v-if="overdue || showRelative"
-                    class="block text-sm"
-                    :class="overdue ? 'text-destructive' : 'text-muted-foreground'"
+                    class="flex w-20 shrink-0 flex-col gap-0.5 pt-0.5 text-xs font-medium tabular-nums"
+                    :class="
+                        overdue
+                            ? 'text-destructive/80'
+                            : 'text-muted-foreground'
+                    "
                 >
-                    {{ reminder.due_relative }}
+                    <span class="whitespace-nowrap uppercase">{{
+                        reminder.due_date_label
+                    }}</span>
+                    <span class="whitespace-nowrap">{{
+                        reminder.due_time_label
+                    }}</span>
                 </span>
-                <span
-                    v-if="reminder.notes"
-                    class="mt-1 block text-sm break-words text-muted-foreground"
-                >
-                    {{ reminder.notes }}
+                <span class="min-w-0 flex-1">
+                    <span class="block font-medium break-words">
+                        {{ reminder.title }}
+                    </span>
+                    <span
+                        v-if="overdue || showRelative"
+                        class="block text-sm"
+                        :class="
+                            overdue
+                                ? 'text-destructive'
+                                : 'text-muted-foreground'
+                        "
+                    >
+                        {{ reminder.due_relative }}
+                    </span>
+                    <ListBadge :reminder="reminder" />
+                    <SnoozedBadge :reminder="reminder" />
+                    <SharedReminderBadge :reminder="reminder" />
+                    <RecurrenceBadge :reminder="reminder" />
+                    <AlertsBadge :reminder="reminder" />
+                    <SilencedBadge :reminder="reminder" />
                 </span>
-                <ListBadge :reminder="reminder" />
-                <SnoozedBadge :reminder="reminder" />
-                <SharedReminderBadge :reminder="reminder" />
-                <RecurrenceBadge :reminder="reminder" />
-                <AlertsBadge :reminder="reminder" />
-                <SilencedBadge :reminder="reminder" />
-            </span>
-        </button>
+            </button>
+
+            <!--
+                Notes live outside the edit button: they clamp with their own
+                Show more toggle, and a button can't nest inside a button.
+                ps-24 = the button's px-1 + w-20 date column + gap-3, so the
+                notes line up under the title.
+            -->
+            <div v-if="reminder.notes" class="min-w-0 ps-24 pe-1 pb-1.5">
+                <ReminderNotes :notes="reminder.notes" />
+            </div>
+        </div>
 
         <!--
             The right-hand action stack, matching the reminders index minus

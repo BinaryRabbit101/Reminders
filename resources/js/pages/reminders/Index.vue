@@ -16,6 +16,7 @@ import RecurrenceBadge from '@/components/RecurrenceBadge.vue';
 import ReminderCompleteToggle from '@/components/ReminderCompleteToggle.vue';
 import ReminderDeleteDialog from '@/components/ReminderDeleteDialog.vue';
 import ReminderFormSheet from '@/components/ReminderFormSheet.vue';
+import ReminderNotes from '@/components/ReminderNotes.vue';
 import ReminderSnoozeMenu from '@/components/ReminderSnoozeMenu.vue';
 import SharedReminderBadge from '@/components/SharedReminderBadge.vue';
 import SilencedBadge from '@/components/SilencedBadge.vue';
@@ -313,12 +314,10 @@ function isOverdue(reminder: Reminder): boolean {
                         <span aria-hidden="true"> &middot; </span>
                         <span>{{ reminder.due_label }}</span>
                     </p>
-                    <p
+                    <ReminderNotes
                         v-if="reminder.notes"
-                        class="mt-1 text-sm break-words text-muted-foreground"
-                    >
-                        {{ reminder.notes }}
-                    </p>
+                        :notes="reminder.notes"
+                    />
                     <ListBadge :reminder="reminder" />
                     <button
                         v-if="reminder.list"
