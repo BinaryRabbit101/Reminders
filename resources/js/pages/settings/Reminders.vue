@@ -8,7 +8,6 @@ import {
     MoonStar,
     RefreshCw,
     Smartphone,
-    Zap,
 } from '@lucide/vue';
 import { ref, watch } from 'vue';
 import ReminderSettingsController from '@/actions/App/Http/Controllers/Settings/ReminderSettingsController';
@@ -23,9 +22,8 @@ import { edit } from '@/routes/reminder-settings';
 import type {
     AppReminderDefaults,
     EffectiveReminderSettings,
+    ReminderPhoneKey,
     ReminderSettings,
-    ReminderShortcutKey,
-    ReminderWidgetFeed,
     TimezoneOption,
 } from '@/types';
 
@@ -34,8 +32,7 @@ const props = defineProps<{
     timezones: TimezoneOption[];
     effective: EffectiveReminderSettings;
     app_defaults: AppReminderDefaults;
-    widget: ReminderWidgetFeed;
-    shortcut: ReminderShortcutKey;
+    phone: ReminderPhoneKey;
 }>();
 
 defineOptions({
@@ -281,19 +278,24 @@ async function copy(field: string, value: string | null): Promise<void> {
         </div>
 
         <!--
-            The home-screen widget's feed link. Its own section rather than a
-            field on the form above: nothing here is a preference, and the
-            button below has a side effect (the previous link stops working)
-            that a "Save settings" press must never carry by accident.
+            The key the phone carries. Its own section rather than a field on
+            the form above: nothing here is a preference, and the button below
+            has a side effect (everything on the phone stops working) that a
+            "Save settings" press must never carry by accident.
+
+            One panel for one key. The widget and the Shortcut used to have a
+            token each, which meant two things to paste, two buttons that
+            looked alike, and a widget link that silently refused when pasted
+            into the Shortcut. They are the same phone in the same hand.
         -->
-        <div class="space-y-4" data-test="widget-feed-panel">
+        <div class="space-y-4" data-test="phone-key-panel">
             <Heading
                 variant="small"
-                title="Home screen widget"
-                description="A private link the iPhone widget reads your reminders from"
+                title="Your phone's key"
+                description="One private key for the home-screen widget and the Add reminder shortcut"
             />
 
-            <template v-if="props.widget.feed_url">
+            <template v-if="props.phone.token">
                 <div class="grid gap-2">
                     <Label for="widget-feed-url">Widget feed link</Label>
                     <div class="flex flex-wrap items-center gap-2">
@@ -302,7 +304,7 @@ async function copy(field: string, value: string | null): Promise<void> {
                             class="min-w-0 flex-1 rounded-md border bg-muted px-3 py-2 font-mono text-xs break-all"
                             data-test="widget-feed-url"
                         >
-                            {{ props.widget.feed_url }}
+                            {{ props.phone.feed_url }}
                         </code>
                         <Button
                             variant="outline"
@@ -310,7 +312,7 @@ async function copy(field: string, value: string | null): Promise<void> {
                             type="button"
                             aria-label="Copy widget feed link"
                             data-test="copy-widget-feed-button"
-                            @click="copy('widget', props.widget.feed_url)"
+                            @click="copy('widget', props.phone.feed_url)"
                         >
                             <Check v-if="copied === 'widget'" />
                             <Copy v-else />
@@ -318,161 +320,100 @@ async function copy(field: string, value: string | null): Promise<void> {
                     </div>
                     <p class="text-sm text-muted-foreground">
                         Paste it into the Scriptable widget's
-                        <code class="font-mono">CONFIG</code>. Anyone holding
-                        this link can read your reminders, so treat it like a
-                        password — it is the whole key.
+                        <code class="font-mono">CONFIG</code>. The key is
+                        already in it.
                     </p>
                 </div>
-            </template>
 
-            <p v-else class="text-sm text-muted-foreground">
-                No link yet. Generate one when you are ready to set the widget
-                up on your phone.
-            </p>
-
-            <Form
-                v-bind="ReminderSettingsController.regenerateWidgetToken.form()"
-                :options="{ preserveScroll: true }"
-                v-slot="{ processing }"
-            >
-                <Button
-                    type="submit"
-                    :variant="props.widget.feed_url ? 'outline' : 'default'"
-                    :disabled="processing"
-                    class="w-full sm:w-auto"
-                    data-test="regenerate-widget-token-button"
-                >
-                    <RefreshCw v-if="props.widget.feed_url" />
-                    <Smartphone v-else />
-                    {{
-                        props.widget.feed_url
-                            ? 'Generate a new link'
-                            : 'Generate widget link'
-                    }}
-                </Button>
-            </Form>
-
-            <p
-                v-if="props.widget.feed_url"
-                class="text-sm text-muted-foreground"
-            >
-                Generating a new link revokes this one straight away — the
-                widget will show its error card until you paste the new link in.
-            </p>
-        </div>
-
-        <!--
-            The iPhone Shortcut's quick-add key. Its own panel below the
-            widget's rather than a second field inside it: they are two
-            credentials with two revoke buttons, and one panel holding both
-            would invite the reader to press the wrong one.
-
-            Endpoint and key are shown apart, unlike the widget's single
-            ready-to-paste link, because the recipe puts the key in a header —
-            a URL carrying it in the query string would write it into the
-            server's access log on every run.
-        -->
-        <div class="space-y-4" data-test="shortcut-key-panel">
-            <Heading
-                variant="small"
-                title="Quick add shortcut"
-                description="A key the iPhone Shortcut uses to add reminders without opening the app"
-            />
-
-            <div class="grid gap-2">
-                <Label for="shortcut-endpoint">Endpoint</Label>
-                <div class="flex flex-wrap items-center gap-2">
-                    <code
-                        id="shortcut-endpoint"
-                        class="min-w-0 flex-1 rounded-md border bg-muted px-3 py-2 font-mono text-xs break-all"
-                        data-test="shortcut-endpoint"
-                    >
-                        POST {{ props.shortcut.endpoint }}
-                    </code>
-                    <Button
-                        variant="outline"
-                        size="icon"
-                        type="button"
-                        aria-label="Copy shortcut endpoint"
-                        data-test="copy-shortcut-endpoint-button"
-                        @click="copy('endpoint', props.shortcut.endpoint)"
-                    >
-                        <Check v-if="copied === 'endpoint'" />
-                        <Copy v-else />
-                    </Button>
-                </div>
-            </div>
-
-            <template v-if="props.shortcut.token">
                 <div class="grid gap-2">
-                    <Label for="shortcut-token">Shortcut key</Label>
+                    <Label for="shortcut-endpoint">Shortcut endpoint</Label>
                     <div class="flex flex-wrap items-center gap-2">
                         <code
-                            id="shortcut-token"
+                            id="shortcut-endpoint"
                             class="min-w-0 flex-1 rounded-md border bg-muted px-3 py-2 font-mono text-xs break-all"
-                            data-test="shortcut-token"
+                            data-test="shortcut-endpoint"
                         >
-                            {{ props.shortcut.token }}
+                            POST {{ props.phone.shortcut_endpoint }}
                         </code>
                         <Button
                             variant="outline"
                             size="icon"
                             type="button"
-                            aria-label="Copy shortcut key"
-                            data-test="copy-shortcut-token-button"
-                            @click="copy('token', props.shortcut.token)"
+                            aria-label="Copy shortcut endpoint"
+                            data-test="copy-shortcut-endpoint-button"
+                            @click="
+                                copy('endpoint', props.phone.shortcut_endpoint)
+                            "
+                        >
+                            <Check v-if="copied === 'endpoint'" />
+                            <Copy v-else />
+                        </Button>
+                    </div>
+                </div>
+
+                <div class="grid gap-2">
+                    <Label for="phone-token">The key on its own</Label>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <code
+                            id="phone-token"
+                            class="min-w-0 flex-1 rounded-md border bg-muted px-3 py-2 font-mono text-xs break-all"
+                            data-test="phone-token"
+                        >
+                            {{ props.phone.token }}
+                        </code>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            type="button"
+                            aria-label="Copy key"
+                            data-test="copy-phone-token-button"
+                            @click="copy('token', props.phone.token)"
                         >
                             <Check v-if="copied === 'token'" />
                             <Copy v-else />
                         </Button>
                     </div>
                     <p class="text-sm text-muted-foreground">
-                        In the Shortcut's <em>Get Contents of URL</em> action,
-                        send it as the header
-                        <code class="font-mono">X-Shortcut-Token</code> with a
-                        JSON body of
-                        <code class="font-mono">title, due_date, due_time</code
-                        >. Anyone holding this key can create reminders on your
-                        account, so treat it like a password.
+                        For the Shortcut's <em>Get Contents of URL</em> action,
+                        as the header
+                        <code class="font-mono">X-Shortcut-Token</code>. Anyone
+                        holding it can read and create your reminders, so treat
+                        it like a password.
                     </p>
                 </div>
             </template>
 
             <p v-else class="text-sm text-muted-foreground">
-                No key yet. Generate one when you are ready to build the
-                Shortcut on your phone.
+                No key yet. Generate one when you are ready to set the widget
+                or the shortcut up on your phone.
             </p>
 
             <Form
-                v-bind="
-                    ReminderSettingsController.regenerateShortcutToken.form()
-                "
+                v-bind="ReminderSettingsController.regeneratePhoneToken.form()"
                 :options="{ preserveScroll: true }"
                 v-slot="{ processing }"
             >
                 <Button
                     type="submit"
-                    :variant="props.shortcut.token ? 'outline' : 'default'"
+                    :variant="props.phone.token ? 'outline' : 'default'"
                     :disabled="processing"
                     class="w-full sm:w-auto"
-                    data-test="regenerate-shortcut-token-button"
+                    data-test="regenerate-phone-token-button"
                 >
-                    <RefreshCw v-if="props.shortcut.token" />
-                    <Zap v-else />
+                    <RefreshCw v-if="props.phone.token" />
+                    <Smartphone v-else />
                     {{
-                        props.shortcut.token
+                        props.phone.token
                             ? 'Generate a new key'
-                            : 'Generate shortcut key'
+                            : 'Generate phone key'
                     }}
                 </Button>
             </Form>
 
-            <p
-                v-if="props.shortcut.token"
-                class="text-sm text-muted-foreground"
-            >
-                Generating a new key revokes this one straight away — the
-                Shortcut will fail until you paste the new key into it.
+            <p v-if="props.phone.token" class="text-sm text-muted-foreground">
+                Generating a new key revokes this one straight away, and it is
+                the same key in both places — the widget shows its error card
+                and the shortcut refuses until you paste the new one into each.
             </p>
         </div>
 

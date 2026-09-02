@@ -15,10 +15,11 @@ use Tests\TestCase;
  *
  * Two lines matter more here than anywhere else in the suite. The first is
  * the one every token route holds: a refusal must say nothing about which
- * accounts exist. The second belongs to this endpoint alone — it *writes*,
- * so the read-only widget token must be useless against it and vice versa.
- * If those two ever cross, a link sitting in a Scriptable CONFIG on a phone
- * quietly becomes permission to create reminders.
+ * accounts exist. The second is the promise this endpoint shipped without and
+ * had to be corrected to keep — the key from the widget's feed link works
+ * here, and the key from here reads the feed. One phone, one key. There are
+ * tests in both directions, because a second credential is exactly the sort
+ * of thing that grows back.
  */
 class ShortcutReminderTest extends TestCase
 {
@@ -32,14 +33,14 @@ class ShortcutReminderTest extends TestCase
     }
 
     /**
-     * A user holding a quick-add key.
+     * A user holding a phone key — the one the widget and the Shortcut share.
      *
      * @param  array<string, mixed>  $attributes
      */
     private function keyHolder(array $attributes = []): User
     {
         $user = User::factory()->create($attributes);
-        $user->regenerateShortcutToken();
+        $user->regeneratePhoneToken();
 
         return $user;
     }
@@ -51,7 +52,7 @@ class ShortcutReminderTest extends TestCase
      */
     private function quickAdd(User $user, array $payload = ['title' => 'Take out bins'])
     {
-        return $this->withHeader('X-Shortcut-Token', (string) $user->shortcut_token)
+        return $this->withHeader('X-Shortcut-Token', (string) $user->phone_token)
             ->postJson(route('shortcut.reminders.store'), $payload);
     }
 
@@ -77,7 +78,7 @@ class ShortcutReminderTest extends TestCase
         $user = $this->keyHolder();
 
         $this->postJson(route('shortcut.reminders.store'), [
-            'token' => $user->shortcut_token,
+            'token' => $user->phone_token,
             'title' => 'Water plants',
         ])->assertCreated();
 
@@ -89,7 +90,7 @@ class ShortcutReminderTest extends TestCase
         $user = $this->keyHolder();
 
         $this->postJson(
-            route('shortcut.reminders.store', ['token' => $user->shortcut_token]),
+            route('shortcut.reminders.store', ['token' => $user->phone_token]),
             ['title' => 'Call the vet'],
         )->assertCreated();
 
@@ -123,62 +124,68 @@ class ShortcutReminderTest extends TestCase
         $missing = $this->postJson(route('shortcut.reminders.store'), ['title' => 'Nope']);
         $wrong = $this->postJson(route('shortcut.reminders.store'), ['token' => 'nope', 'title' => 'Nope']);
         $nearMiss = $this->postJson(route('shortcut.reminders.store'), [
-            'token' => substr((string) $user->shortcut_token, 0, -1).'X',
+            'token' => substr((string) $user->phone_token, 0, -1).'X',
             'title' => 'Nope',
         ]);
 
         foreach ([$missing, $wrong, $nearMiss] as $response) {
             $response->assertForbidden()
-                ->assertJsonPath('message', 'Invalid shortcut token.');
+                ->assertJsonPath('message', 'Invalid token — copy it again from Settings → Reminders.');
         }
     }
 
-    public function test_a_widget_token_cannot_create_a_reminder()
+    public function test_the_key_from_the_widget_link_creates_reminders_too()
     {
-        // The whole reason there are two columns. A read link that has been
-        // sitting on a phone for a year must not also be a write key.
+        // The point of there being one column. Somebody who has had the
+        // widget set up for a month pastes *that* key into the Shortcut and
+        // it works — pulling it out of the feed URL the settings page hands
+        // out, exactly as they would by hand.
         $user = $this->keyHolder();
-        $user->regenerateWidgetToken();
 
-        $this->withHeader('X-Shortcut-Token', (string) $user->widget_token)
-            ->postJson(route('shortcut.reminders.store'), ['title' => 'Nope'])
-            ->assertForbidden();
+        parse_str((string) parse_url(route('widget.today', ['token' => $user->phone_token]), PHP_URL_QUERY), $query);
 
-        $this->assertDatabaseCount('reminders', 0);
+        $this->withHeader('X-Shortcut-Token', (string) $query['token'])
+            ->postJson(route('shortcut.reminders.store'), ['title' => 'Take out bins'])
+            ->assertCreated();
+
+        $this->assertDatabaseCount('reminders', 1);
     }
 
-    public function test_a_shortcut_key_cannot_read_the_widget_feed()
+    public function test_the_same_key_reads_the_widget_feed()
     {
         // And the same door in the other direction.
         $user = $this->keyHolder();
-        $user->regenerateWidgetToken();
 
-        $this->getJson(route('widget.today', ['token' => $user->shortcut_token]))
-            ->assertForbidden();
+        $this->getJson(route('widget.today', ['token' => $user->phone_token]))
+            ->assertOk();
     }
 
     public function test_a_key_is_revoked_by_generating_a_new_one()
     {
         $user = $this->keyHolder();
-        $old = (string) $user->shortcut_token;
+        $old = (string) $user->phone_token;
 
-        $user->regenerateShortcutToken();
+        $user->regeneratePhoneToken();
 
         $this->withHeader('X-Shortcut-Token', $old)
             ->postJson(route('shortcut.reminders.store'), ['title' => 'Nope'])
             ->assertForbidden();
     }
 
-    public function test_the_two_tokens_are_minted_independently()
+    public function test_rolling_the_key_revokes_both_surfaces_at_once()
     {
+        // The cost of one key, and the reason the settings page says so out
+        // loud: a roll that fixes one thing breaks the other until the new
+        // value is pasted into it as well.
         $user = $this->keyHolder();
-        $user->regenerateWidgetToken();
-        $widget = (string) $user->widget_token;
+        $old = (string) $user->phone_token;
 
-        $user->regenerateShortcutToken();
+        $user->regeneratePhoneToken();
 
-        $this->assertSame($widget, (string) $user->fresh()->widget_token);
-        $this->assertNotSame($widget, (string) $user->fresh()->shortcut_token);
+        $this->getJson(route('widget.today', ['token' => $old]))->assertForbidden();
+        $this->withHeader('X-Shortcut-Token', $old)
+            ->postJson(route('shortcut.reminders.store'), ['title' => 'Nope'])
+            ->assertForbidden();
     }
 
     // ---- When the reminder lands ---------------------------------------

@@ -273,29 +273,22 @@ export type AppReminderDefaults = {
 };
 
 /**
- * The account's home-screen widget feed, as the settings page shows it.
+ * The one key the account's phone carries, as the settings page shows it.
  *
- * Both fields are null until the account generates a token — an account that
- * has never asked for a widget should not be carrying a live bearer token.
- * `feed_url` is the whole ready-to-paste URL, token included, assembled
- * server-side: it is the only thing anyone ever does with the token.
+ * Three fields for one secret, because the two surfaces want it in different
+ * shapes: `feed_url` is the whole ready-to-paste URL the Scriptable widget's
+ * CONFIG takes, token included, assembled server-side; `shortcut_endpoint`
+ * and the bare `token` are what the Shortcut needs, since it sends the key as
+ * a header rather than in the URL.
+ *
+ * `token` and `feed_url` are null until the account generates a key — an
+ * account that has set neither up should not be carrying a live bearer token.
+ * `shortcut_endpoint` is not a secret and is always present.
  */
-export type ReminderWidgetFeed = {
+export type ReminderPhoneKey = {
     token: string | null;
     feed_url: string | null;
-};
-
-/**
- * The account's quick-add key, as the settings page shows it.
- *
- * Two fields rather than the widget's one assembled link, on purpose: this
- * token creates reminders, and the Shortcut recipe sends it in a header so it
- * never lands in an access log. `endpoint` is not a secret and is always
- * present; `token` is null until the account generates one.
- */
-export type ReminderShortcutKey = {
-    token: string | null;
-    endpoint: string;
+    shortcut_endpoint: string;
 };
 
 /** One account in the viewer's household. */

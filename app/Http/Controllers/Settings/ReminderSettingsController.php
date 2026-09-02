@@ -46,44 +46,26 @@ class ReminderSettingsController extends Controller
     }
 
     /**
-     * Mint this account a widget token — or roll the one it already has.
+     * Mint this account a phone token — or roll the one it already has.
      *
      * One button does both jobs, because they are the same job: there is no
      * way to revoke a bearer token other than replacing it, so "generate" and
-     * "generate a new one" are one action with two labels. Rolling it stops
-     * the old link resolving immediately, which is exactly what somebody
-     * clicking it wants; the toast says so rather than burying it on the page.
-     */
-    public function regenerateWidgetToken(Request $request): RedirectResponse
-    {
-        $existed = $request->user()->widget_token !== null;
-
-        $request->user()->regenerateWidgetToken();
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => $existed
-            ? __('New widget link generated. The old one no longer works.')
-            : __('Widget link generated.'),
-        ]);
-
-        return to_route('reminder-settings.edit');
-    }
-
-    /**
-     * Mint this account a quick-add token — or roll the one it already has.
+     * "generate a new one" are one action with two labels.
      *
-     * The same one-button-two-labels story as the widget's, with a sharper
-     * edge: this token can create reminders, so rolling it is the only way to
-     * take that ability back from a phone that has it.
+     * And one button for **both** phone surfaces, because it is one key. The
+     * toast says what rolling costs rather than burying it on the page: the
+     * widget and the Shortcut both stop working until the new value is pasted
+     * into each.
      */
-    public function regenerateShortcutToken(Request $request): RedirectResponse
+    public function regeneratePhoneToken(Request $request): RedirectResponse
     {
-        $existed = $request->user()->shortcut_token !== null;
+        $existed = $request->user()->phone_token !== null;
 
-        $request->user()->regenerateShortcutToken();
+        $request->user()->regeneratePhoneToken();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => $existed
-            ? __('New shortcut key generated. The old one no longer works.')
-            : __('Shortcut key generated.'),
+            ? __('New key generated. Paste it into the widget and the Shortcut — the old one no longer works.')
+            : __('Phone key generated.'),
         ]);
 
         return to_route('reminder-settings.edit');
@@ -115,8 +97,11 @@ class ReminderSettingsController extends Controller
      *         quiet_hours_label: string,
      *     },
      *     app_defaults: array{timezone_label: string, default_time_label: string},
-     *     widget: array{token: string|null, feed_url: string|null},
-     *     shortcut: array{token: string|null, endpoint: string},
+     *     phone: array{
+     *         token: string|null,
+     *         feed_url: string|null,
+     *         shortcut_endpoint: string,
+     *     },
      * }
      */
     private function payload(User $user): array
@@ -143,32 +128,24 @@ class ReminderSettingsController extends Controller
                 'timezone_label' => ReminderTimezones::label((string) config('reminders.timezone')),
                 'default_time_label' => ReminderPresenter::timeLabel((string) config('reminders.default_time')),
             ],
-            // The home-screen widget's feed. The whole URL is assembled here,
-            // token and all, because pasting it into the widget's CONFIG is
-            // the only thing anybody ever does with it — a bare token would
-            // just make the reader build this string by hand on a phone.
+            // One key, both phone surfaces. Three fields rather than one,
+            // because the two surfaces want the same secret in different
+            // shapes: the widget's CONFIG takes a whole URL with the token in
+            // its query string, while the Shortcut takes the endpoint and the
+            // key separately and sends the key as a header.
             //
-            // Null until the account asks for one: an unused account should
-            // not be carrying a live bearer token it never wanted.
-            'widget' => [
-                'token' => $user->widget_token,
-                'feed_url' => $user->widget_token === null
+            // `token` is null until the account asks for one — an unused
+            // account should not be carrying a live bearer token it never
+            // wanted — and `feed_url` follows it, since a link with no token
+            // in it is not a link to anything. The endpoint is shown either
+            // way: it is not a secret, and seeing where the button will point
+            // is half of understanding what it does.
+            'phone' => [
+                'token' => $user->phone_token,
+                'feed_url' => $user->phone_token === null
                     ? null
-                    : route('widget.today', ['token' => $user->widget_token]),
-            ],
-            // The iPhone Shortcut's quick-add key. Handed over as two fields
-            // rather than one assembled URL, which is the opposite of the
-            // choice above and deliberate: this token *writes*, and the setup
-            // recipe carries it in a header so it stays out of the web
-            // server's access log. A ready-made link with the key in its query
-            // string would be one paste away from undoing that.
-            //
-            // The endpoint is shown whether or not a key exists — it is not a
-            // secret, and seeing where the button will point is half of
-            // understanding what it does.
-            'shortcut' => [
-                'token' => $user->shortcut_token,
-                'endpoint' => route('shortcut.reminders.store'),
+                    : route('widget.today', ['token' => $user->phone_token]),
+                'shortcut_endpoint' => route('shortcut.reminders.store'),
             ],
         ];
     }

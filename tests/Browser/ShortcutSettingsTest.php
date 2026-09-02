@@ -7,13 +7,14 @@ use Laravel\Dusk\Browser;
 use Tests\DuskTestCase;
 
 /**
- * The quick-add key panel on Settings → Reminders.
+ * The phone-key panel on Settings → Reminders.
  *
  * The Pest suite already proves the route mints and rolls the token; what
- * only a browser can hold is that the panel says the right thing at each of
- * its two states, and that it sits *beside* the widget's rather than on top
- * of it — two credentials with two buttons, which is the whole reason there
- * are two columns behind them.
+ * only a browser can hold is that one panel hands out one key in the two
+ * shapes its two surfaces need — and that the key printed on its own is the
+ * same string as the one inside the widget's feed link. When those were two
+ * different secrets, the widget link pasted into the Shortcut was refused,
+ * which is the bug this panel exists to make impossible to have again.
  */
 class ShortcutSettingsTest extends DuskTestCase
 {
@@ -24,50 +25,55 @@ class ShortcutSettingsTest extends DuskTestCase
         $this->browse(function (Browser $browser) use ($user) {
             $browser->loginAs($user)
                 ->visit('/settings/reminders')
-                ->waitFor('[data-test="shortcut-key-panel"]')
-                ->assertSee('Quick add shortcut')
-                // The endpoint is not a secret and shows from the start:
-                // seeing where the button points is half of understanding it.
-                ->assertSeeIn('[data-test="shortcut-endpoint"]', '/api/shortcut/reminders')
-                ->assertMissing('[data-test="shortcut-token"]')
-                ->assertSeeIn('[data-test="regenerate-shortcut-token-button"]', 'Generate shortcut key');
+                ->waitFor('[data-test="phone-key-panel"]')
+                ->assertSee("Your phone's key")
+                ->assertMissing('[data-test="phone-token"]')
+                ->assertMissing('[data-test="widget-feed-url"]')
+                ->assertSeeIn('[data-test="regenerate-phone-token-button"]', 'Generate phone key');
         });
     }
 
-    public function test_generating_a_key_shows_it_and_leaves_the_widget_link_alone()
+    public function test_one_key_is_shown_in_both_shapes()
     {
         $user = User::factory()->create();
-        $user->regenerateWidgetToken();
 
         $this->browse(function (Browser $browser) use ($user) {
             $browser->loginAs($user)
                 ->visit('/settings/reminders')
-                ->waitFor('[data-test="shortcut-key-panel"]')
-                ->click('[data-test="regenerate-shortcut-token-button"]')
-                ->waitFor('[data-test="shortcut-token"]')
-                ->assertSeeIn('[data-test="shortcut-token"]', (string) $user->refresh()->shortcut_token)
+                ->waitFor('[data-test="phone-key-panel"]')
+                ->click('[data-test="regenerate-phone-token-button"]')
+                ->waitFor('[data-test="phone-token"]');
+
+            $token = (string) $user->refresh()->phone_token;
+
+            $browser->assertSeeIn('[data-test="phone-token"]', $token)
+                // The same string, inside the link the widget's CONFIG takes.
+                ->assertSeeIn('[data-test="widget-feed-url"]', $token)
+                ->assertSeeIn('[data-test="shortcut-endpoint"]', '/api/shortcut/reminders')
                 ->assertSee('X-Shortcut-Token')
-                ->assertSeeIn('[data-test="regenerate-shortcut-token-button"]', 'Generate a new key')
-                // The widget's link is untouched: pressing one revoke button
-                // must not knock the other credential over.
-                ->assertSeeIn('[data-test="widget-feed-url"]', (string) $user->widget_token);
+                ->assertSeeIn('[data-test="regenerate-phone-token-button"]', 'Generate a new key');
         });
     }
 
-    public function test_rolling_the_key_replaces_the_one_on_screen()
+    public function test_rolling_the_key_replaces_it_everywhere_on_the_page()
     {
         $user = User::factory()->create();
-        $user->regenerateShortcutToken();
-        $first = (string) $user->shortcut_token;
+        $user->regeneratePhoneToken();
+        $first = (string) $user->phone_token;
 
         $this->browse(function (Browser $browser) use ($user, $first) {
             $browser->loginAs($user)
                 ->visit('/settings/reminders')
-                ->waitFor('[data-test="shortcut-token"]')
-                ->assertSeeIn('[data-test="shortcut-token"]', $first)
-                ->click('[data-test="regenerate-shortcut-token-button"]')
-                ->waitUntilMissingText($first)
-                ->assertSeeIn('[data-test="shortcut-token"]', (string) $user->refresh()->shortcut_token);
+                ->waitFor('[data-test="phone-token"]')
+                ->assertSeeIn('[data-test="phone-token"]', $first)
+                ->click('[data-test="regenerate-phone-token-button"]')
+                ->waitUntilMissingText($first);
+
+            $token = (string) $user->refresh()->phone_token;
+
+            // Both places move together, because there is only one of them.
+            $browser->assertSeeIn('[data-test="phone-token"]', $token)
+                ->assertSeeIn('[data-test="widget-feed-url"]', $token);
         });
     }
 }

@@ -12,8 +12,15 @@ next-after-*now*; the medium footer self-suppresses when redundant. No offline c
 the error card is the honest failure. `throttle:60,1` added (bearer token on an
 unauthenticated route). All failures are a uniform 403.
 
+**Amended 2026-09-02 (quick-add-shortcut):** the `widget_token` column is now
+**`phone_token`** and `User::byWidgetToken()` is now `User::byPhoneToken()` — the same
+key authenticates the iPhone Shortcut's quick-add endpoint as well as this feed. The
+values were renamed in place, so no CONFIG in the field needed re-pasting. The settings
+panel that hands the link out is now "Your phone's key", and rolling it revokes **both**
+surfaces at once.
+
 **Things later work must know:**
-- `User::byWidgetToken()` `hash_equals`-scans all token holders **without early break**
+- `User::byPhoneToken()` `hash_equals`-scans all token holders **without early break**
   (constant-time; don't "optimize" into a WHERE clause). Token is 48 chars, `Hidden`,
   not fillable; regenerating revokes instantly.
 - Feed route lives in `routes/widget.php`, registered via the same `bootstrap/app.php`

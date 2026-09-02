@@ -35,18 +35,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/reminders', [ReminderSettingsController::class, 'edit'])->name('reminder-settings.edit');
     Route::patch('settings/reminders', [ReminderSettingsController::class, 'update'])->name('reminder-settings.update');
 
-    // Mint (or roll) the bearer token behind the home-screen widget's feed.
-    // A POST rather than part of the settings form: it is an action with a
-    // side effect somebody has to mean, not a preference being saved.
-    Route::post('settings/reminders/widget-token', [ReminderSettingsController::class, 'regenerateWidgetToken'])
-        ->name('reminder-settings.widget-token');
-
-    // And the same for the quick-add key the iPhone Shortcut posts with. Its
-    // own action rather than one button minting both: the two tokens are
-    // revoked for different reasons, and rolling the one on a working widget
-    // to fix a broken shortcut would be a strange way to spend an afternoon.
-    Route::post('settings/reminders/shortcut-token', [ReminderSettingsController::class, 'regenerateShortcutToken'])
-        ->name('reminder-settings.shortcut-token');
+    // Mint (or roll) the bearer token the phone carries — the widget's feed
+    // and the Shortcut's quick-add both resolve it. A POST rather than part of
+    // the settings form: it is an action with a side effect somebody has to
+    // mean, not a preference being saved.
+    Route::post('settings/reminders/phone-token', [ReminderSettingsController::class, 'regeneratePhoneToken'])
+        ->name('reminder-settings.phone-token');
 
     Route::get('settings/household', [HouseholdController::class, 'edit'])->name('household.edit');
     Route::post('settings/household', [HouseholdController::class, 'store'])->name('household.store');

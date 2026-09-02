@@ -15,7 +15,6 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
-use InvalidArgumentException;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -31,8 +30,7 @@ use NotificationChannels\WebPush\HasPushSubscriptions;
  * @property bool $quiet_hours_enabled
  * @property string $quiet_hours_start
  * @property string $quiet_hours_end
- * @property string|null $widget_token
- * @property string|null $shortcut_token
+ * @property string|null $phone_token
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string|null $two_factor_secret
@@ -47,12 +45,11 @@ use NotificationChannels\WebPush\HasPushSubscriptions;
     'name', 'email', 'password',
     // The delivery preferences from the settings page. `household_id` is
     // still deliberately absent — membership only moves through
-    // HouseholdController (shared-reminders close-out), and `widget_token`
-    // and `shortcut_token` are absent for the same reason: they are minted,
-    // never typed.
+    // HouseholdController (shared-reminders close-out), and `phone_token`
+    // is absent for the same reason: it is minted, never typed.
     'timezone', 'default_time', 'quiet_hours_enabled', 'quiet_hours_start', 'quiet_hours_end',
 ])]
-#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token', 'widget_token', 'shortcut_token'])]
+#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token', 'phone_token'])]
 class User extends Authenticatable implements PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
@@ -141,55 +138,39 @@ class User extends Authenticatable implements PasskeyUser
     }
 
     /**
-     * How many characters a widget token carries.
+     * How many characters the phone token carries.
      *
      * `Str::random()` is `random_bytes()` in base64, so 48 characters is a
      * little over 280 bits of entropy — the token is the *entire*
      * authentication on a route with no session behind it, so there is no
      * such thing as comfortably long enough here.
      *
-     * The shortcut token is minted at the same length, for a stronger reason:
-     * that one can write.
+     * It authorizes writing as well as reading, which only sharpens that.
      */
-    public const WIDGET_TOKEN_LENGTH = 48;
+    public const PHONE_TOKEN_LENGTH = 48;
 
     /**
-     * The columns holding a bearer token, and what each one buys.
-     *
-     * Two separate credentials on purpose. `widget_token` is read-only and
-     * already lives in a Scriptable CONFIG on a phone; `shortcut_token`
-     * creates reminders. Reusing one string for both would silently upgrade a
-     * key that is already out in the world, and would leave one button to
-     * revoke two different risks (quick-add-shortcut spec).
-     *
-     * @var list<string>
-     */
-    private const TOKEN_COLUMNS = ['widget_token', 'shortcut_token'];
-
-    /**
-     * Mint this account a new widget token, revoking whatever came before.
+     * Mint this account a new phone token, revoking whatever came before.
      *
      * Regenerating is the revoke button: the old token stops resolving the
-     * instant this returns, so a phone whose CONFIG still carries it starts
-     * showing its error card until somebody pastes the new link in. That is
-     * the intended behaviour — there is no other way to take a bearer token
-     * back.
-     */
-    public function regenerateWidgetToken(): string
-    {
-        return $this->regenerateToken('widget_token');
-    }
-
-    /**
-     * Mint this account a new quick-add token, revoking whatever came before.
+     * instant this returns, so a phone still carrying it starts failing until
+     * somebody pastes the new one in. That is the intended behaviour — there
+     * is no other way to take a bearer token back.
      *
-     * Same revoke-by-replacement story as the widget's, and the Shortcut on
-     * the phone starts failing the moment it returns — which is the point of
-     * pressing it.
+     * One token covers **both** phone surfaces, so rolling it breaks both at
+     * once: the widget shows its error card and the Shortcut refuses, until
+     * the new value is pasted into the Scriptable CONFIG *and* the Shortcut's
+     * header. That is the trade this app chose deliberately — one thing to
+     * copy beats two to keep in step (quick-add-shortcut close-out).
+     *
+     * `forceFill` because the column is deliberately not fillable: a token is
+     * minted here or nowhere.
      */
-    public function regenerateShortcutToken(): string
+    public function regeneratePhoneToken(): string
     {
-        return $this->regenerateToken('shortcut_token');
+        $this->forceFill(['phone_token' => self::newPhoneToken()])->save();
+
+        return (string) $this->phone_token;
     }
 
     /**
@@ -198,48 +179,24 @@ class User extends Authenticatable implements PasskeyUser
      * The unique index on the column is the real guarantee (SQLite row locks
      * are no-ops); this loop only keeps the insert from failing in practice.
      */
-    public static function newWidgetToken(): string
+    public static function newPhoneToken(): string
     {
-        return self::newToken('widget_token');
-    }
-
-    /**
-     * Roll one of this account's bearer tokens.
-     *
-     * `forceFill` because the columns are deliberately not fillable: a token
-     * is minted here or nowhere.
-     */
-    private function regenerateToken(string $column): string
-    {
-        $this->forceFill([$column => self::newToken($column)])->save();
-
-        return (string) $this->{$column};
-    }
-
-    /**
-     * A fresh token for one of the bearer columns, unique across accounts.
-     *
-     * @param  string  $column  One of {@see self::TOKEN_COLUMNS} — checked,
-     *                          because the value reaches a query builder.
-     */
-    private static function newToken(string $column): string
-    {
-        self::assertTokenColumn($column);
-
         do {
-            $token = Str::random(self::WIDGET_TOKEN_LENGTH);
-        } while (self::query()->where($column, $token)->exists());
+            $token = Str::random(self::PHONE_TOKEN_LENGTH);
+        } while (self::query()->where('phone_token', $token)->exists());
 
         return $token;
     }
 
     /**
-     * Resolve the account a widget token belongs to, or null.
+     * Resolve the account a phone token belongs to, or null.
      *
-     * Two things here are deliberate and easy to "tidy" into a bug:
+     * The single entry point for both token-authenticated surfaces — the
+     * widget's feed and the Shortcut's quick-add. Two things here are
+     * deliberate and easy to "tidy" into a bug:
      *
      * 1. **The comparison is `hash_equals`, in PHP, over every candidate.** A
-     *    `where('widget_token', $token)` would hand the comparison to SQLite,
+     *    `where('phone_token', $token)` would hand the comparison to SQLite,
      *    whose string compare short-circuits on the first differing byte —
      *    which is exactly the timing signal a bearer token must not leak. The
      *    loop also never breaks early, so how long a lookup takes says
@@ -253,63 +210,21 @@ class User extends Authenticatable implements PasskeyUser
      * whether the token was absent, malformed, or simply wrong — the response
      * must not be an oracle.
      */
-    public static function byWidgetToken(?string $token): ?self
+    public static function byPhoneToken(?string $token): ?self
     {
-        return self::byToken('widget_token', $token);
-    }
-
-    /**
-     * Resolve the account a quick-add token belongs to, or null.
-     *
-     * Same scan, same guarantees, a different column — and a token minted for
-     * one column can never resolve on the other, which is what keeps the
-     * read-only widget link from being a write key
-     * ({@see self::TOKEN_COLUMNS}).
-     */
-    public static function byShortcutToken(?string $token): ?self
-    {
-        return self::byToken('shortcut_token', $token);
-    }
-
-    /**
-     * The constant-time lookup both bearer columns share.
-     *
-     * Everything {@see self::byWidgetToken()} documents applies here — it is
-     * the same loop, and the reasons it is written this way rather than as a
-     * `where()` are the reasons the tokens are safe to hand out at all. The
-     * column is checked against the allow-list because it lands in a query.
-     */
-    private static function byToken(string $column, ?string $token): ?self
-    {
-        self::assertTokenColumn($column);
-
         if ($token === null || $token === '') {
             return null;
         }
 
         $match = null;
 
-        foreach (self::query()->whereNotNull($column)->get() as $candidate) {
-            if (hash_equals((string) $candidate->{$column}, $token)) {
+        foreach (self::query()->whereNotNull('phone_token')->get() as $candidate) {
+            if (hash_equals((string) $candidate->phone_token, $token)) {
                 $match = $candidate;
             }
         }
 
         return $match;
-    }
-
-    /**
-     * Guard the one string in this file that reaches SQL as an identifier.
-     *
-     * Both callers pass a literal today. This is here so that stays true: a
-     * column name threaded in from anywhere else is a bug worth failing loudly
-     * rather than a query worth running.
-     */
-    private static function assertTokenColumn(string $column): void
-    {
-        if (! in_array($column, self::TOKEN_COLUMNS, true)) {
-            throw new InvalidArgumentException("[{$column}] is not a bearer-token column.");
-        }
     }
 
     /**

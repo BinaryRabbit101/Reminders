@@ -13,7 +13,7 @@ use Illuminate\Http\Request;
  * Registered in bootstrap/app.php *outside* the web middleware group, for the
  * same reason the notification actions are: the caller is Scriptable on a
  * phone, which has no session, no cookie jar and no CSRF token. The query
- * token is the entire authentication — see {@see User::byWidgetToken()} for
+ * token is the entire authentication — see {@see User::byPhoneToken()} for
  * why the comparison is what it is.
  *
  * The token is per-account rather than app-wide (two accounts share this app)
@@ -35,9 +35,9 @@ class WidgetFeedController extends Controller
     {
         $token = $request->query('token');
 
-        $user = User::byWidgetToken(is_string($token) ? $token : null);
+        $user = User::byPhoneToken(is_string($token) ? $token : null);
 
-        abort_if($user === null, 403, 'Invalid widget token.');
+        abort_if($user === null, 403, 'Invalid token — copy it again from Settings → Reminders.');
 
         return response()->json(WidgetFeed::make()->for($user));
     }

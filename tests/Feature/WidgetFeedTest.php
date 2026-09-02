@@ -33,14 +33,14 @@ class WidgetFeedTest extends TestCase
     }
 
     /**
-     * A user with a widget token already minted.
+     * A user with a phone token already minted.
      *
      * @param  array<string, mixed>  $attributes
      */
     private function tokenHolder(array $attributes = []): User
     {
         $user = User::factory()->create($attributes);
-        $user->regenerateWidgetToken();
+        $user->regeneratePhoneToken();
 
         return $user;
     }
@@ -48,7 +48,7 @@ class WidgetFeedTest extends TestCase
     /** The feed URL as the settings page hands it out. */
     private function feedUrl(User $user): string
     {
-        return route('widget.today', ['token' => $user->widget_token]);
+        return route('widget.today', ['token' => $user->phone_token]);
     }
 
     // ---- Token authentication ------------------------------------------
@@ -110,7 +110,7 @@ class WidgetFeedTest extends TestCase
         $missing = $this->getJson(route('widget.today'));
         $wrong = $this->getJson(route('widget.today', ['token' => 'nope']));
         $nearMiss = $this->getJson(route('widget.today', [
-            'token' => substr((string) $user->widget_token, 0, -1).'X',
+            'token' => substr((string) $user->phone_token, 0, -1).'X',
         ]));
 
         // Status and message only: the suite runs with debug on, which adds a
@@ -118,7 +118,7 @@ class WidgetFeedTest extends TestCase
         // the *same* refusal, not what else the debug renderer bolts on.
         foreach ([$missing, $wrong, $nearMiss] as $response) {
             $response->assertForbidden()
-                ->assertJsonPath('message', 'Invalid widget token.');
+                ->assertJsonPath('message', 'Invalid token — copy it again from Settings → Reminders.');
         }
     }
 
@@ -137,7 +137,7 @@ class WidgetFeedTest extends TestCase
         $user = $this->tokenHolder();
         $old = $this->feedUrl($user);
 
-        $user->regenerateWidgetToken();
+        $user->regeneratePhoneToken();
 
         $this->getJson($old)->assertForbidden();
         $this->getJson($this->feedUrl($user))->assertOk();
@@ -158,7 +158,7 @@ class WidgetFeedTest extends TestCase
     {
         $user = $this->tokenHolder();
 
-        $this->assertArrayNotHasKey('widget_token', $user->toArray());
+        $this->assertArrayNotHasKey('phone_token', $user->toArray());
     }
 
     // ---- Payload -------------------------------------------------------

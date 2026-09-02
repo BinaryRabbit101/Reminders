@@ -251,140 +251,95 @@ class ReminderSettingsTest extends TestCase
         $this->assertNull($bob->refresh()->timezone);
     }
 
-    // ---- The home-screen widget's feed link ----------------------------
+    // ---- The phone's key: widget feed + quick-add shortcut -------------
 
-    public function test_a_new_account_has_no_widget_link_yet()
+    public function test_a_new_account_has_no_phone_key_yet()
     {
+        // The shortcut endpoint is on the page from the start — it is not a
+        // secret, and seeing where the button will point is half of
+        // understanding what it does. Only the key waits to be asked for,
+        // and the feed link waits with it: a link with no token in it is not
+        // a link to anything.
         $this->actingAs(User::factory()->create())
             ->get(route('reminder-settings.edit'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('settings/Reminders')
-                ->where('widget.token', null)
-                ->where('widget.feed_url', null)
+                ->where('phone.token', null)
+                ->where('phone.feed_url', null)
+                ->where('phone.shortcut_endpoint', route('shortcut.reminders.store'))
             );
     }
 
-    public function test_a_user_can_generate_a_widget_link()
+    public function test_a_user_can_generate_a_phone_key()
     {
         $user = User::factory()->create();
 
         $this->actingAs($user)
-            ->post(route('reminder-settings.widget-token'))
+            ->post(route('reminder-settings.phone-token'))
             ->assertRedirect(route('reminder-settings.edit'));
 
-        $token = $user->refresh()->widget_token;
+        $token = $user->refresh()->phone_token;
 
         $this->assertNotNull($token);
-        $this->assertSame(User::WIDGET_TOKEN_LENGTH, strlen($token));
+        $this->assertSame(User::PHONE_TOKEN_LENGTH, strlen($token));
 
-        // The page hands out the whole ready-to-paste URL, not a bare token.
+        // One secret, handed over in the two shapes its two surfaces want:
+        // the whole ready-to-paste feed URL for the widget's CONFIG, and the
+        // bare key for the Shortcut's header.
         $this->actingAs($user)
             ->get(route('reminder-settings.edit'))
             ->assertInertia(fn ($page) => $page
-                ->where('widget.token', $token)
-                ->where('widget.feed_url', route('widget.today', ['token' => $token]))
+                ->where('phone.token', $token)
+                ->where('phone.feed_url', route('widget.today', ['token' => $token]))
             );
     }
 
-    public function test_generating_again_rolls_the_link()
+    public function test_the_feed_link_carries_the_same_key_the_shortcut_uses()
     {
+        // The bug this replaced: the link on this page and the key beside it
+        // were two different secrets, so pasting the widget's link into the
+        // Shortcut was refused. They must be the same string.
         $user = User::factory()->create();
-        $user->regenerateWidgetToken();
-        $first = $user->widget_token;
+        $user->regeneratePhoneToken();
 
         $this->actingAs($user)
-            ->post(route('reminder-settings.widget-token'))
-            ->assertRedirect(route('reminder-settings.edit'));
-
-        $this->assertNotSame($first, $user->refresh()->widget_token);
+            ->get(route('reminder-settings.edit'))
+            ->assertInertia(fn ($page) => $page
+                ->where('phone.feed_url', fn (string $url): bool => str_contains(
+                    $url, (string) $user->phone_token,
+                ))
+            );
     }
 
-    public function test_a_guest_cannot_generate_a_widget_link()
+    public function test_generating_again_rolls_the_key()
     {
-        $this->post(route('reminder-settings.widget-token'))
+        $user = User::factory()->create();
+        $user->regeneratePhoneToken();
+        $first = $user->phone_token;
+
+        $this->actingAs($user)
+            ->post(route('reminder-settings.phone-token'))
+            ->assertRedirect(route('reminder-settings.edit'));
+
+        $this->assertNotSame($first, $user->refresh()->phone_token);
+    }
+
+    public function test_a_guest_cannot_generate_a_phone_key()
+    {
+        $this->post(route('reminder-settings.phone-token'))
             ->assertRedirect(route('login'));
     }
 
-    public function test_generating_a_link_touches_nobody_elses()
+    public function test_generating_a_key_touches_nobody_elses()
     {
         $alice = User::factory()->create();
         $bob = User::factory()->create();
 
-        $this->actingAs($alice)->post(route('reminder-settings.widget-token'));
+        $this->actingAs($alice)->post(route('reminder-settings.phone-token'));
 
-        $this->assertNotNull($alice->refresh()->widget_token);
-        $this->assertNull($bob->refresh()->widget_token);
-    }
-
-    // ---- The iPhone Shortcut's quick-add key ---------------------------
-
-    public function test_a_new_account_has_no_shortcut_key_yet()
-    {
-        // The endpoint is on the page from the start — it is not a secret,
-        // and seeing where the button will point is half of understanding
-        // what it does. Only the key waits to be asked for.
-        $this->actingAs(User::factory()->create())
-            ->get(route('reminder-settings.edit'))
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('settings/Reminders')
-                ->where('shortcut.token', null)
-                ->where('shortcut.endpoint', route('shortcut.reminders.store'))
-            );
-    }
-
-    public function test_a_user_can_generate_a_shortcut_key()
-    {
-        $user = User::factory()->create();
-
-        $this->actingAs($user)
-            ->post(route('reminder-settings.shortcut-token'))
-            ->assertRedirect(route('reminder-settings.edit'));
-
-        $token = $user->refresh()->shortcut_token;
-
-        $this->assertNotNull($token);
-        $this->assertSame(User::WIDGET_TOKEN_LENGTH, strlen($token));
-
-        // Handed over bare, unlike the widget's assembled link: the recipe
-        // sends it as a header so it stays out of the access log.
-        $this->actingAs($user)
-            ->get(route('reminder-settings.edit'))
-            ->assertInertia(fn ($page) => $page->where('shortcut.token', $token));
-    }
-
-    public function test_generating_again_rolls_the_shortcut_key()
-    {
-        $user = User::factory()->create();
-        $user->regenerateShortcutToken();
-        $first = $user->shortcut_token;
-
-        $this->actingAs($user)
-            ->post(route('reminder-settings.shortcut-token'))
-            ->assertRedirect(route('reminder-settings.edit'));
-
-        $this->assertNotSame($first, $user->refresh()->shortcut_token);
-    }
-
-    public function test_rolling_one_key_leaves_the_other_alone()
-    {
-        // Two credentials, two revocations: fixing a broken Shortcut must not
-        // knock the widget off somebody's home screen.
-        $user = User::factory()->create();
-        $user->regenerateWidgetToken();
-        $user->regenerateShortcutToken();
-        $widget = $user->widget_token;
-
-        $this->actingAs($user)->post(route('reminder-settings.shortcut-token'));
-
-        $this->assertSame($widget, $user->refresh()->widget_token);
-    }
-
-    public function test_a_guest_cannot_generate_a_shortcut_key()
-    {
-        $this->post(route('reminder-settings.shortcut-token'))
-            ->assertRedirect(route('login'));
+        $this->assertNotNull($alice->refresh()->phone_token);
+        $this->assertNull($bob->refresh()->phone_token);
     }
 
     public function test_a_chosen_timezone_decides_how_a_new_reminder_is_stored()

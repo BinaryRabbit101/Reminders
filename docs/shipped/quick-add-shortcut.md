@@ -5,6 +5,19 @@ Shortcut on the phone needs the code deployed to the mini-PC first)
 
 ## Close-out
 
+**Amended 2026-09-02, hours after shipping: one token, not two.** The spec below argued
+for a separate `shortcut_token` so a read credential could not become a write one. That
+was wrong in practice and the owner said so immediately: both keys live on the same
+phone, in the same person's hands, behind the same tailnet, so the split isolated
+nothing — it just meant two things to paste, and a widget link that was silently refused
+when pasted into the Shortcut, which is the first thing anybody would try.
+
+`widget_token` was therefore **renamed** to `phone_token` (rename, not re-mint, so every
+Scriptable CONFIG already in the field kept working), `shortcut_token` was dropped, and
+`User::byPhoneToken()` is now the single resolver behind both surfaces. The cost, stated
+on the settings page and tested: rolling the key revokes the widget and the Shortcut at
+once.
+
 **Deviations:** none of substance. Two additions the build turned up:
 
 - `due_time` accepts `5:00 PM` as well as `17:00`, normalised in
@@ -19,12 +32,15 @@ Shortcut on the phone needs the code deployed to the mini-PC first)
 
 **Things later work must know:**
 
-- **Two bearer columns now, not one.** `widget_token` reads, `shortcut_token` writes, and
-  neither resolves on the other's route — there are tests in both directions
-  (`ShortcutReminderTest::test_a_widget_token_cannot_create_a_reminder`). The
-  constant-time scan moved into `User::byToken()`; `byWidgetToken()`/`byShortcutToken()`
-  are now thin wrappers over it. The column name reaches a query builder, so it is checked
-  against `User::TOKEN_COLUMNS` — keep that guard if you add a third.
+- **One bearer column: `phone_token`.** The widget feed and the quick-add endpoint both
+  resolve it through `User::byPhoneToken()`, and there are tests in both directions
+  (`ShortcutReminderTest::test_the_key_from_the_widget_link_creates_reminders_too` and
+  `test_the_same_key_reads_the_widget_feed`) because a second credential is exactly the
+  sort of thing that grows back. The constant-time `hash_equals` scan is unchanged and
+  still must not be "optimized" into a `where()` clause.
+- **The refusal message is shared too**, and deliberately not surface-specific: it used
+  to say "Invalid shortcut token.", which is precisely what made the owner think a second
+  key existed. Both now say `Invalid token — copy it again from Settings → Reminders.`
 - **Local wall-time → UTC lives in `App\Support\DueMoment`.** `ReminderRequest` used to do
   it inline and now calls through it, so the "single place" claim in that class's docblock
   is still true with two writers. Anything else that accepts a date and a time from a
@@ -35,18 +51,21 @@ Shortcut on the phone needs the code deployed to the mini-PC first)
   `api/shortcut`, name `shortcut.`, `throttle:20,1`.
 - The reply's `message` key is load-bearing: a 201, a 422 and a 403 all carry one, so the
   Shortcut reads the same dictionary key whatever happened.
-- Settings hands out endpoint and key as **two** fields, unlike the widget's single
-  assembled link, because the recipe sends the key as a header — keep it out of URLs.
+- Settings has **one** panel — "Your phone's key" — handing the one secret out in the two
+  shapes its surfaces want: the whole feed URL for the widget's CONFIG, and the endpoint
+  plus the bare key for the Shortcut, which sends it as a header rather than in a URL.
 - **Deployment must**: the endpoint is only reachable from a phone once this is deployed
   to the mini-PC (`https://minipc.jackal-hippocampus.ts.net:452`), and `APP_URL` decides
   what the settings page prints as the endpoint. The key is generated per account on
-  Settings → Reminders after deploying.
-- Suite at close: 500 Pest tests / 2038 assertions, 38 Dusk tests.
+  Settings → Reminders after deploying. An account that already had a widget link needs
+  nothing new — that key is the key.
+- Suite at close: 496 Pest tests / 2018 assertions, 38 Dusk tests.
 
 ## The Shortcut recipe
 
 Build it in the Shortcuts app on the phone; eight actions. Settings → Reminders →
-**Quick add shortcut** has the endpoint and the key to paste in.
+**Your phone's key** has the endpoint and the key to paste in — and if the widget is
+already set up, that same key is the one already in its CONFIG.
 
 1. **Ask for Input** — *Text*, prompt "What's the reminder?"
 2. **Ask for Input** — *Date*, prompt "What day?"
@@ -100,6 +119,14 @@ Throttled harder than the feed (`throttle:20,1`): this one creates rows, and a h
 tapping a shortcut will never come near twenty a minute.
 
 ### Authentication — a *second* token
+
+> **Superseded the same day — see the close-out above.** This section is what shipped at
+> 15:14 and was wrong by 16:00: the owner pasted the widget's token into the Shortcut,
+> which is the obvious thing to do, and was refused. There is now **one** `phone_token`
+> and both surfaces resolve it. The reasoning below is kept because it is the argument
+> that has to be re-answered if anybody proposes splitting them again — and the answer
+> is that both credentials live on the same phone, in the same hand, so the split bought
+> no isolation and cost a paste that silently failed.
 
 A new `shortcut_token` column on `users`, minted and rolled exactly like `widget_token`,
 resolved with the same non-short-circuiting `hash_equals` scan.
