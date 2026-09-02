@@ -69,6 +69,27 @@ class ReminderSettingsController extends Controller
     }
 
     /**
+     * Mint this account a quick-add token — or roll the one it already has.
+     *
+     * The same one-button-two-labels story as the widget's, with a sharper
+     * edge: this token can create reminders, so rolling it is the only way to
+     * take that ability back from a phone that has it.
+     */
+    public function regenerateShortcutToken(Request $request): RedirectResponse
+    {
+        $existed = $request->user()->shortcut_token !== null;
+
+        $request->user()->regenerateShortcutToken();
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => $existed
+            ? __('New shortcut key generated. The old one no longer works.')
+            : __('Shortcut key generated.'),
+        ]);
+
+        return to_route('reminder-settings.edit');
+    }
+
+    /**
      * Everything the page renders.
      *
      * The raw columns travel as `settings` — nulls included, because null is
@@ -95,6 +116,7 @@ class ReminderSettingsController extends Controller
      *     },
      *     app_defaults: array{timezone_label: string, default_time_label: string},
      *     widget: array{token: string|null, feed_url: string|null},
+     *     shortcut: array{token: string|null, endpoint: string},
      * }
      */
     private function payload(User $user): array
@@ -133,6 +155,20 @@ class ReminderSettingsController extends Controller
                 'feed_url' => $user->widget_token === null
                     ? null
                     : route('widget.today', ['token' => $user->widget_token]),
+            ],
+            // The iPhone Shortcut's quick-add key. Handed over as two fields
+            // rather than one assembled URL, which is the opposite of the
+            // choice above and deliberate: this token *writes*, and the setup
+            // recipe carries it in a header so it stays out of the web
+            // server's access log. A ready-made link with the key in its query
+            // string would be one paste away from undoing that.
+            //
+            // The endpoint is shown whether or not a key exists — it is not a
+            // secret, and seeing where the button will point is half of
+            // understanding what it does.
+            'shortcut' => [
+                'token' => $user->shortcut_token,
+                'endpoint' => route('shortcut.reminders.store'),
             ],
         ];
     }

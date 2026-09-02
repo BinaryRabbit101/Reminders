@@ -6,6 +6,7 @@ use App\Http\Controllers\ReminderListController;
 use App\Models\Reminder;
 use App\Models\ReminderAlert;
 use App\Models\User;
+use App\Support\DueMoment;
 use App\Support\RecurrenceRule;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -155,13 +156,18 @@ class ReminderRequest extends FormRequest
     /**
      * The validated reminder attributes, ready to persist.
      *
-     * This is the single place local wall-time becomes UTC: the date and
+     * Local wall-time becomes UTC here and nowhere downstream: the date and
      * time the user typed are read on **their own** timezone
      * ({@see User::timezone()}, which falls back to
      * `config('reminders.timezone')`) and converted once, on the way in.
-     * Nothing downstream converts again — `due_at` is UTC from here to the
-     * database and back out. A date with no time lands on their default
-     * reminder time, same fallback.
+     * `due_at` is UTC from here to the database and back out. A date with no
+     * time lands on their default reminder time, same fallback.
+     *
+     * The reading itself lives in {@see DueMoment::local()} rather than in
+     * this method, because the quick-add endpoint the iPhone Shortcut posts
+     * to has to read a date and a time exactly the same way — and "the same
+     * way" is a promise better kept by one function than by two that look
+     * alike (quick-add-shortcut spec).
      *
      * Sharing is read with `boolean()` rather than from the validated set: an
      * unchecked checkbox posts nothing at all, and "absent" has to mean
@@ -190,16 +196,11 @@ class ReminderRequest extends FormRequest
      */
     public function reminderAttributes(): array
     {
-        $user = $this->user();
-        $timezone = $user instanceof User ? $user->timezone() : (string) config('reminders.timezone');
-        $date = (string) $this->validated('due_date');
-        $time = trim((string) $this->validated('due_time'));
-
-        if ($time === '') {
-            $time = $user instanceof User ? $user->defaultTime() : (string) config('reminders.default_time');
-        }
-
-        $local = Carbon::parse("{$date} {$time}", $timezone);
+        $local = DueMoment::local(
+            $this->user(),
+            (string) $this->validated('due_date'),
+            $this->validated('due_time'),
+        );
 
         return [
             'title' => (string) $this->validated('title'),

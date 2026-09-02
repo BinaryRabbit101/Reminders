@@ -41,6 +41,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('settings/reminders/widget-token', [ReminderSettingsController::class, 'regenerateWidgetToken'])
         ->name('reminder-settings.widget-token');
 
+    // And the same for the quick-add key the iPhone Shortcut posts with. Its
+    // own action rather than one button minting both: the two tokens are
+    // revoked for different reasons, and rolling the one on a working widget
+    // to fix a broken shortcut would be a strange way to spend an afternoon.
+    Route::post('settings/reminders/shortcut-token', [ReminderSettingsController::class, 'regenerateShortcutToken'])
+        ->name('reminder-settings.shortcut-token');
+
     Route::get('settings/household', [HouseholdController::class, 'edit'])->name('household.edit');
     Route::post('settings/household', [HouseholdController::class, 'store'])->name('household.store');
     Route::post('settings/household/join', [HouseholdController::class, 'join'])->name('household.join');

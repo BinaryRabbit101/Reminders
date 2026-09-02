@@ -285,6 +285,19 @@ export type ReminderWidgetFeed = {
     feed_url: string | null;
 };
 
+/**
+ * The account's quick-add key, as the settings page shows it.
+ *
+ * Two fields rather than the widget's one assembled link, on purpose: this
+ * token creates reminders, and the Shortcut recipe sends it in a header so it
+ * never lands in an access log. `endpoint` is not a secret and is always
+ * present; `token` is null until the account generates one.
+ */
+export type ReminderShortcutKey = {
+    token: string | null;
+    endpoint: string;
+};
+
 /** One account in the viewer's household. */
 export type HouseholdMember = {
     id: number;

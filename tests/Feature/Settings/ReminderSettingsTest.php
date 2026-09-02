@@ -317,6 +317,76 @@ class ReminderSettingsTest extends TestCase
         $this->assertNull($bob->refresh()->widget_token);
     }
 
+    // ---- The iPhone Shortcut's quick-add key ---------------------------
+
+    public function test_a_new_account_has_no_shortcut_key_yet()
+    {
+        // The endpoint is on the page from the start — it is not a secret,
+        // and seeing where the button will point is half of understanding
+        // what it does. Only the key waits to be asked for.
+        $this->actingAs(User::factory()->create())
+            ->get(route('reminder-settings.edit'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('settings/Reminders')
+                ->where('shortcut.token', null)
+                ->where('shortcut.endpoint', route('shortcut.reminders.store'))
+            );
+    }
+
+    public function test_a_user_can_generate_a_shortcut_key()
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->post(route('reminder-settings.shortcut-token'))
+            ->assertRedirect(route('reminder-settings.edit'));
+
+        $token = $user->refresh()->shortcut_token;
+
+        $this->assertNotNull($token);
+        $this->assertSame(User::WIDGET_TOKEN_LENGTH, strlen($token));
+
+        // Handed over bare, unlike the widget's assembled link: the recipe
+        // sends it as a header so it stays out of the access log.
+        $this->actingAs($user)
+            ->get(route('reminder-settings.edit'))
+            ->assertInertia(fn ($page) => $page->where('shortcut.token', $token));
+    }
+
+    public function test_generating_again_rolls_the_shortcut_key()
+    {
+        $user = User::factory()->create();
+        $user->regenerateShortcutToken();
+        $first = $user->shortcut_token;
+
+        $this->actingAs($user)
+            ->post(route('reminder-settings.shortcut-token'))
+            ->assertRedirect(route('reminder-settings.edit'));
+
+        $this->assertNotSame($first, $user->refresh()->shortcut_token);
+    }
+
+    public function test_rolling_one_key_leaves_the_other_alone()
+    {
+        // Two credentials, two revocations: fixing a broken Shortcut must not
+        // knock the widget off somebody's home screen.
+        $user = User::factory()->create();
+        $user->regenerateWidgetToken();
+        $user->regenerateShortcutToken();
+        $widget = $user->widget_token;
+
+        $this->actingAs($user)->post(route('reminder-settings.shortcut-token'));
+
+        $this->assertSame($widget, $user->refresh()->widget_token);
+    }
+
+    public function test_a_guest_cannot_generate_a_shortcut_key()
+    {
+        $this->post(route('reminder-settings.shortcut-token'))
+            ->assertRedirect(route('login'));
+    }
+
     public function test_a_chosen_timezone_decides_how_a_new_reminder_is_stored()
     {
         $user = User::factory()->create(['timezone' => 'America/New_York']);

@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\ResolveShortcutToken;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -36,6 +37,17 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->prefix('api/widget')
                 ->name('widget.')
                 ->group(base_path('routes/widget.php'));
+
+            // The iPhone Shortcut's quick-add endpoint — out here for the
+            // third time for the same reason, and with its own token
+            // (ResolveShortcutToken) rather than the widget's, because this
+            // one writes. Throttled harder than the feed: a widget polls, but
+            // nobody taps a shortcut twenty times a minute, so anything past
+            // that is either a stuck loop or somebody guessing.
+            Route::middleware(['throttle:20,1', ResolveShortcutToken::class])
+                ->prefix('api/shortcut')
+                ->name('shortcut.')
+                ->group(base_path('routes/shortcut.php'));
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {

@@ -8,6 +8,7 @@ import {
     MoonStar,
     RefreshCw,
     Smartphone,
+    Zap,
 } from '@lucide/vue';
 import { ref, watch } from 'vue';
 import ReminderSettingsController from '@/actions/App/Http/Controllers/Settings/ReminderSettingsController';
@@ -23,6 +24,7 @@ import type {
     AppReminderDefaults,
     EffectiveReminderSettings,
     ReminderSettings,
+    ReminderShortcutKey,
     ReminderWidgetFeed,
     TimezoneOption,
 } from '@/types';
@@ -33,6 +35,7 @@ const props = defineProps<{
     effective: EffectiveReminderSettings;
     app_defaults: AppReminderDefaults;
     widget: ReminderWidgetFeed;
+    shortcut: ReminderShortcutKey;
 }>();
 
 defineOptions({
@@ -62,22 +65,36 @@ watch(
     (value) => (timezone.value = value ?? ''),
 );
 
-const copied = ref(false);
+/**
+ * Which field last went to the clipboard, so only that button ticks.
+ *
+ * A single ref rather than one per field: the page now has three copyable
+ * strings, and three booleans that must never be true at once is just this
+ * with more chances to get it wrong.
+ */
+const copied = ref<string | null>(null);
 
 /**
- * Clipboard access is a nicety — the link is on screen either way, so a
+ * Clipboard access is a nicety — the value is on screen either way, so a
  * refusal (insecure context, denied permission) must not surface as an error.
  * Same stance as the household invite code.
  */
-async function copyFeedUrl(): Promise<void> {
-    if (!props.widget.feed_url) {
+async function copy(field: string, value: string | null): Promise<void> {
+    if (!value) {
         return;
     }
 
     try {
-        await navigator.clipboard.writeText(props.widget.feed_url);
-        copied.value = true;
-        window.setTimeout(() => (copied.value = false), 2000);
+        await navigator.clipboard.writeText(value);
+        copied.value = field;
+        window.setTimeout(() => {
+            // Only clear our own tick: a second copy during the two seconds
+            // would otherwise have its confirmation cut short by the first
+            // one's timer.
+            if (copied.value === field) {
+                copied.value = null;
+            }
+        }, 2000);
     } catch {
         // Nothing to do: the user can still read and select it.
     }
@@ -293,9 +310,9 @@ async function copyFeedUrl(): Promise<void> {
                             type="button"
                             aria-label="Copy widget feed link"
                             data-test="copy-widget-feed-button"
-                            @click="copyFeedUrl()"
+                            @click="copy('widget', props.widget.feed_url)"
                         >
-                            <Check v-if="copied" />
+                            <Check v-if="copied === 'widget'" />
                             <Copy v-else />
                         </Button>
                     </div>
@@ -341,6 +358,121 @@ async function copyFeedUrl(): Promise<void> {
             >
                 Generating a new link revokes this one straight away — the
                 widget will show its error card until you paste the new link in.
+            </p>
+        </div>
+
+        <!--
+            The iPhone Shortcut's quick-add key. Its own panel below the
+            widget's rather than a second field inside it: they are two
+            credentials with two revoke buttons, and one panel holding both
+            would invite the reader to press the wrong one.
+
+            Endpoint and key are shown apart, unlike the widget's single
+            ready-to-paste link, because the recipe puts the key in a header —
+            a URL carrying it in the query string would write it into the
+            server's access log on every run.
+        -->
+        <div class="space-y-4" data-test="shortcut-key-panel">
+            <Heading
+                variant="small"
+                title="Quick add shortcut"
+                description="A key the iPhone Shortcut uses to add reminders without opening the app"
+            />
+
+            <div class="grid gap-2">
+                <Label for="shortcut-endpoint">Endpoint</Label>
+                <div class="flex flex-wrap items-center gap-2">
+                    <code
+                        id="shortcut-endpoint"
+                        class="min-w-0 flex-1 rounded-md border bg-muted px-3 py-2 font-mono text-xs break-all"
+                        data-test="shortcut-endpoint"
+                    >
+                        POST {{ props.shortcut.endpoint }}
+                    </code>
+                    <Button
+                        variant="outline"
+                        size="icon"
+                        type="button"
+                        aria-label="Copy shortcut endpoint"
+                        data-test="copy-shortcut-endpoint-button"
+                        @click="copy('endpoint', props.shortcut.endpoint)"
+                    >
+                        <Check v-if="copied === 'endpoint'" />
+                        <Copy v-else />
+                    </Button>
+                </div>
+            </div>
+
+            <template v-if="props.shortcut.token">
+                <div class="grid gap-2">
+                    <Label for="shortcut-token">Shortcut key</Label>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <code
+                            id="shortcut-token"
+                            class="min-w-0 flex-1 rounded-md border bg-muted px-3 py-2 font-mono text-xs break-all"
+                            data-test="shortcut-token"
+                        >
+                            {{ props.shortcut.token }}
+                        </code>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            type="button"
+                            aria-label="Copy shortcut key"
+                            data-test="copy-shortcut-token-button"
+                            @click="copy('token', props.shortcut.token)"
+                        >
+                            <Check v-if="copied === 'token'" />
+                            <Copy v-else />
+                        </Button>
+                    </div>
+                    <p class="text-sm text-muted-foreground">
+                        In the Shortcut's <em>Get Contents of URL</em> action,
+                        send it as the header
+                        <code class="font-mono">X-Shortcut-Token</code> with a
+                        JSON body of
+                        <code class="font-mono">title, due_date, due_time</code
+                        >. Anyone holding this key can create reminders on your
+                        account, so treat it like a password.
+                    </p>
+                </div>
+            </template>
+
+            <p v-else class="text-sm text-muted-foreground">
+                No key yet. Generate one when you are ready to build the
+                Shortcut on your phone.
+            </p>
+
+            <Form
+                v-bind="
+                    ReminderSettingsController.regenerateShortcutToken.form()
+                "
+                :options="{ preserveScroll: true }"
+                v-slot="{ processing }"
+            >
+                <Button
+                    type="submit"
+                    :variant="props.shortcut.token ? 'outline' : 'default'"
+                    :disabled="processing"
+                    class="w-full sm:w-auto"
+                    data-test="regenerate-shortcut-token-button"
+                >
+                    <RefreshCw v-if="props.shortcut.token" />
+                    <Zap v-else />
+                    {{
+                        props.shortcut.token
+                            ? 'Generate a new key'
+                            : 'Generate shortcut key'
+                    }}
+                </Button>
+            </Form>
+
+            <p
+                v-if="props.shortcut.token"
+                class="text-sm text-muted-foreground"
+            >
+                Generating a new key revokes this one straight away — the
+                Shortcut will fail until you paste the new key into it.
             </p>
         </div>
 

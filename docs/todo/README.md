@@ -44,3 +44,9 @@ specs are independent and can go to parallel sub-agents.
 |---|---|---|
 | ~~pre-alerts~~ | ✅ Shipped 2026-08-19 → [../shipped/pre-alerts.md](../shipped/pre-alerts.md) | |
 | ~~auto-complete-on-dispatch~~ | ✅ Shipped 2026-08-19 → [../shipped/auto-complete-on-dispatch.md](../shipped/auto-complete-on-dispatch.md) | |
+
+## Phase 6 — Phone entry points
+
+| Doc | Feature | Depends on |
+|---|---|---|
+| ~~quick-add-shortcut~~ | ✅ Shipped 2026-09-02 → [../shipped/quick-add-shortcut.md](../shipped/quick-add-shortcut.md) — the Shortcut on the phone needs this deployed to the mini-PC | scriptable-widget |
