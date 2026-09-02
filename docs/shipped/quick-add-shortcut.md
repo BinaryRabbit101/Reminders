@@ -5,12 +5,14 @@ Shortcut on the phone needs the code deployed to the mini-PC first)
 
 ## Close-out
 
-**Amended 2026-09-02, hours after shipping: one token, not two.** The spec below argued
-for a separate `shortcut_token` so a read credential could not become a write one. That
-was wrong in practice and the owner said so immediately: both keys live on the same
-phone, in the same person's hands, behind the same tailnet, so the split isolated
-nothing — it just meant two things to paste, and a widget link that was silently refused
-when pasted into the Shortcut, which is the first thing anybody would try.
+**Amended 2026-09-02, hours after shipping: one token, not two.** This first shipped with
+a `shortcut_token` separate from the widget's, so that a read credential could not become
+a write one. That was wrong in practice and the owner said so immediately: both keys live
+on the same phone, in the same person's hands, behind the same tailnet, so the split
+isolated nothing — it just meant two things to paste, and a widget link that was silently
+refused when pasted into the Shortcut, which is the first thing anybody would try. (The
+original argument has been deleted rather than kept as an alternative; the spec body below
+now describes what the code actually does.)
 
 `widget_token` was therefore **renamed** to `phone_token` (rename, not re-mint, so every
 Scriptable CONFIG already in the field kept working), `shortcut_token` was dropped, and
@@ -118,32 +120,20 @@ on `api/*` render as JSON, so a refusal is something the Shortcut can read.
 Throttled harder than the feed (`throttle:20,1`): this one creates rows, and a human
 tapping a shortcut will never come near twenty a minute.
 
-### Authentication — a *second* token
+### Authentication — the phone's one token
 
-> **Superseded the same day — see the close-out above.** This section is what shipped at
-> 15:14 and was wrong by 16:00: the owner pasted the widget's token into the Shortcut,
-> which is the obvious thing to do, and was refused. There is now **one** `phone_token`
-> and both surfaces resolve it. The reasoning below is kept because it is the argument
-> that has to be re-answered if anybody proposes splitting them again — and the answer
-> is that both credentials live on the same phone, in the same hand, so the split bought
-> no isolation and cost a paste that silently failed.
-
-A new `shortcut_token` column on `users`, minted and rolled exactly like `widget_token`,
-resolved with the same non-short-circuiting `hash_equals` scan.
-
-It is deliberately **not** the widget token reused. That token already sits in a
-Scriptable `CONFIG` on a phone and in the settings page's copy field, and it buys its
-holder read access to a reminder list. Letting the same string also *write* would
-silently upgrade a credential that is already out in the world, and would make "roll the
-widget link" and "roll the write key" one button when they are two different risks. Two
-columns, two links, two revocations.
+The `phone_token` column on `users` (renamed from `widget_token`; see the close-out),
+resolved with the same non-short-circuiting `hash_equals` scan the widget feed has always
+used. One key per phone, not one per feature: the widget's link and the Shortcut's header
+carry the same string, and generating a new one in settings revokes both.
 
 Resolution happens in middleware (`ResolveShortcutToken`) rather than in the controller,
 so `$request->user()` is set the way the rest of the app expects it and the form request
 can scope its rules to the owner. The token is read from the `X-Shortcut-Token` header
 first, then from the request input (query or body) — the header is what the setup recipe
-uses, so the write key stays out of the server's access log; the input fallback is there
-so a URL-only setup still works.
+uses, so the key stays out of the server's access log; the input fallback is there
+because the widget's link has always carried it in a query string, and it is the same
+key, so the same paste has to work.
 
 Every failure is one 403 with one message, as with the feed: absent, malformed and wrong
 must be indistinguishable.
@@ -191,11 +181,11 @@ the client assembles no strings here either (today-view close-out):
 
 ## Settings
 
-A "Quick add shortcut" panel on `settings/reminders`, below the widget one, with its own
-`POST settings/reminders/shortcut-token` regenerate action. It shows the endpoint URL and
-the token as **separate** copy fields, unlike the widget's single ready-to-paste link:
-the recipe puts the token in a header, and a URL with the key baked into the query string
-is one paste away from a log file.
+One "Your phone's key" panel on `settings/reminders`, with a single
+`POST settings/reminders/phone-token` regenerate action behind one button. It shows the
+one secret in the three fields its two surfaces need: the widget's whole ready-to-paste
+feed link, the shortcut endpoint, and the key on its own — the recipe puts that in a
+header, so it never has to be pasted as part of a URL.
 
 ## The Shortcut itself
 
