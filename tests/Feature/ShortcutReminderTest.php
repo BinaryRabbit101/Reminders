@@ -238,6 +238,30 @@ class ShortcutReminderTest extends TestCase
         );
     }
 
+    public function test_the_narrow_no_break_space_ios_puts_before_am_is_accepted()
+    {
+        // Since iOS 17 the system time formatter separates the time from
+        // AM/PM with U+202F, not a space. It is indistinguishable on screen,
+        // so a phone doing exactly what the recipe said would have been
+        // refused for a character nobody can see.
+        $user = $this->keyHolder(['timezone' => 'America/Chicago']);
+
+        foreach (["8:30\u{202F}AM", "8:30\u{00A0}AM"] as $posted) {
+            Reminder::query()->delete();
+
+            $this->quickAdd($user, [
+                'title' => 'Emily appointment',
+                'due_date' => '2026-10-22',
+                'due_time' => $posted,
+            ])->assertCreated();
+
+            $this->assertSame(
+                '08:30',
+                Reminder::sole()->due_at->setTimezone('America/Chicago')->format('H:i'),
+            );
+        }
+    }
+
     public function test_midnight_and_noon_survive_the_twelve_hour_conversion()
     {
         $user = $this->keyHolder(['timezone' => 'America/Chicago']);
@@ -395,22 +419,81 @@ class ShortcutReminderTest extends TestCase
         $this->assertSame('Green bin week', Reminder::sole()->notes);
     }
 
-    public function test_blank_optional_fields_are_read_as_absent()
+    public function test_blank_notes_and_list_are_read_as_absent()
     {
         // Shortcuts posts empty strings for anything the user skipped, and
-        // `nullable` only excuses a real null.
+        // `nullable` only excuses a real null. For these two, skipped really
+        // does mean none — unlike the due fields below.
         $user = $this->keyHolder(['timezone' => 'America/Chicago']);
 
         $this->quickAdd($user, [
             'title' => 'Take out bins',
             'notes' => '',
-            'due_date' => '',
-            'due_time' => '',
             'list' => '',
         ])->assertCreated();
 
         $this->assertNull(Reminder::sole()->notes);
         $this->assertNull(Reminder::sole()->list_id);
+    }
+
+    // ---- Empty is not the same as absent -------------------------------
+
+    public function test_an_empty_time_is_refused_rather_than_defaulted()
+    {
+        // The 2026-09-02 bug, and the reason this rule exists: an 8:30 that
+        // never arrived became a silent 9:00 — the account's default hour —
+        // with a confirmation that read as though it had worked. A key the
+        // Shortcut *sent* and left empty is a broken variable, not a choice.
+        Carbon::setTestNow('2026-09-02 14:00:00');
+        $user = $this->keyHolder(['timezone' => 'America/Chicago']);
+
+        $this->quickAdd($user, [
+            'title' => 'Emily appointment',
+            'due_date' => '2026-10-22',
+            'due_time' => '',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath(
+                'errors.due_time.0',
+                "The due time arrived empty — check the variable in the Shortcut's due_time field, or delete that field to use your default hour.",
+            );
+
+        $this->assertDatabaseCount('reminders', 0);
+    }
+
+    public function test_an_empty_date_is_refused_rather_than_defaulted()
+    {
+        $user = $this->keyHolder(['timezone' => 'America/Chicago']);
+
+        $this->quickAdd($user, ['title' => 'Take out bins', 'due_date' => '', 'due_time' => '08:30'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('due_date');
+
+        $this->assertDatabaseCount('reminders', 0);
+    }
+
+    public function test_a_whitespace_only_time_counts_as_empty()
+    {
+        $user = $this->keyHolder(['timezone' => 'America/Chicago']);
+
+        $this->quickAdd($user, ['title' => 'Take out bins', 'due_time' => '   '])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('due_time');
+    }
+
+    public function test_an_omitted_time_still_means_the_default_hour()
+    {
+        // The one-tap shortcut, which posts no due fields at all. Absent is
+        // still a choice — only *empty* is a fault.
+        Carbon::setTestNow('2026-09-02 14:00:00');
+        $user = $this->keyHolder(['timezone' => 'America/Chicago', 'default_time' => '09:00']);
+
+        $this->quickAdd($user, ['title' => 'Take out bins'])->assertCreated();
+
+        $this->assertSame(
+            '09:00',
+            Reminder::sole()->due_at->setTimezone('America/Chicago')->format('H:i'),
+        );
     }
 
     // ---- The reply -----------------------------------------------------

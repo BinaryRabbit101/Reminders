@@ -20,6 +20,23 @@ Scriptable CONFIG already in the field kept working), `shortcut_token` was dropp
 on the settings page and tested: rolling the key revokes the widget and the Shortcut at
 once.
 
+**Fixed 2026-09-02, same day: a chosen 8:30 was stored as 9:00.** The reminder kept its
+date and lost its time, and the account's default hour filled the gap — with a "Reminder
+set — 9:00 AM" confirmation that read like success. Three things had to be true at once,
+and all three are now closed:
+
+- **`ConvertEmptyStringsToNull` runs before validation**, so an empty `due_time` and an
+  absent one were the same null by the time any rule saw them. The rules now branch on
+  `$this->has('due_time')` — the *key's presence* — because absent means "use my default
+  hour" (the one-tap shortcut) while sent-and-empty means a Shortcut variable resolved to
+  nothing. Empty is now a 422 naming the field to go and fix.
+- **The recipe asked for the day and the time in two separate prompts.** iOS's date
+  picker already carries a time, so the two Format Date actions now read the *same*
+  variable — one picker cannot disagree with itself or half-fail.
+- **iOS 17+ writes U+202F, not a space, before AM/PM.** `normaliseTime()` folds Unicode
+  spaces to ASCII first; without it, `8:30 AM` straight out of a 12-hour Format Date
+  would have been refused over a character nobody can see.
+
 **Deviations:** none of substance. Two additions the build turned up:
 
 - `due_time` accepts `5:00 PM` as well as `17:00`, normalised in
@@ -65,36 +82,47 @@ once.
 
 ## The Shortcut recipe
 
-Build it in the Shortcuts app on the phone; eight actions. Settings → Reminders →
+Build it in the Shortcuts app on the phone; seven actions. Settings → Reminders →
 **Your phone's key** has the endpoint and the key to paste in — and if the widget is
 already set up, that same key is the one already in its CONFIG.
 
 1. **Ask for Input** — *Text*, prompt "What's the reminder?"
-2. **Ask for Input** — *Date*, prompt "What day?"
-3. **Format Date** — the date from step 2, *Custom* format `yyyy-MM-dd`.
-4. **Ask for Input** — *Time*, prompt "What time?"
-5. **Format Date** — the time from step 4, *Custom* format `HH:mm`.
-6. **Get Contents of URL** —
+2. **Ask for Input** — *Date*, prompt "When?" — iOS's date picker carries a **time as
+   well as a day**, so this one prompt is the whole due moment.
+3. **Format Date** — *Provided Input* from step 2, *Custom* format `yyyy-MM-dd`. Rename
+   the variable (tap the pill → *Rename*) to **Due Date**.
+4. **Format Date** — *Provided Input* from step 2 **again**, *Custom* format `HH:mm`.
+   Rename to **Due Time**.
+5. **Get Contents of URL** —
    - URL: `https://minipc.jackal-hippocampus.ts.net:452/api/shortcut/reminders`
    - Method: `POST`
    - Headers: `X-Shortcut-Token` → the key from settings
-   - Request Body: `JSON`, three text fields: `title` (step 1), `due_date` (step 3),
-     `due_time` (step 5). Optional extras: `notes`, `list` (a list name), `is_shared`.
-7. **Get Dictionary Value** — key `message`, in *Contents of URL*.
-8. **Show Notification** — the dictionary value from step 7.
+   - Request Body: `JSON`, three text fields: `title` (step 1), `due_date` (Due Date),
+     `due_time` (Due Time). Optional extras: `notes`, `list` (a list name), `is_shared`.
+6. **Get Dictionary Value** — key `message`, in *Contents of URL*.
+7. **Show Notification** — the dictionary value from step 6.
 
-Steps 3 and 5 are not optional padding: a raw *Ask for Input* date variable renders as
-"September 3, 2026" when it lands in a text field, which the endpoint refuses. And both
-Format Date actions produce a variable called *Formatted Date* — rename them (tap the
-pill → *Rename*) before wiring step 6, or the two are indistinguishable in the picker.
+**Both Format Date actions read the same variable from step 2.** That is the fix for the
+2026-09-02 bug: the first recipe asked for a day and a time in two separate prompts, and
+a `due_time` that failed to wire up left the field empty — which the endpoint then read
+as "no time given" and quietly filled in with the default hour. One picker, formatted
+twice, cannot disagree with itself or go missing. (The endpoint now refuses an empty
+`due_time` outright as well; belt and braces.)
 
-Step 8 is why every response carries `message`: a refused key, a bad date and a created
+Steps 3 and 4 are not optional padding either: a raw *Ask for Input* date variable
+renders as "September 3, 2026" when it lands in a text field, which the endpoint refuses.
+Renaming both variables matters because Format Date names them all *Formatted Date* —
+two identically named pills in the picker is how the wrong one gets chosen.
+
+Step 7 is why every response carries `message`: a refused key, a bad date and a created
 reminder all land in the same notification, so the shortcut never fails silently.
 
 Then: *Add to Siri* — the shortcut's **name** is the phrase Siri listens for, so call it
 "Add reminder" — and pin it to the Action Button, the Lock Screen or the home screen.
-Deleting actions 2–5 and their two JSON fields gives a one-tap version that lands on the
-account's default reminder hour.
+Deleting actions 2–4 **and their two JSON fields** gives a one-tap version that lands on
+the account's default reminder hour. Delete the fields, don't just blank them: an empty
+`due_date` or `due_time` is now a refusal, precisely so that a field which was *meant* to
+carry something can never fall back to a default instead.
 
 Tailscale has to be connected on the phone, same as for the widget.
 

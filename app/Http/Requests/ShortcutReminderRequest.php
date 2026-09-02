@@ -39,15 +39,21 @@ class ShortcutReminderRequest extends FormRequest
      * Normalise what a phone actually sends.
      *
      * Shortcuts is a visual editor: a field somebody left alone posts `''`,
-     * and `nullable` only excuses a real null. And the time almost never
-     * arrives as `H:i` on the first try — the obvious "Format Date" preset on
-     * an iPhone set to 12-hour time yields `5:00 PM`. Rejecting that would be
-     * technically correct and practically useless, so it is converted here
-     * and the rule below stays a single strict format.
+     * and `nullable` only excuses a real null. That blanking applies to
+     * `notes` and `list` — where "left alone" genuinely means "none" — and
+     * **deliberately not** to `due_date` and `due_time`. See
+     * {@see notEmptyRule()} for why an empty *time* must never be read as
+     * "no time given".
+     *
+     * The time also almost never arrives as `H:i` on the first try — the
+     * obvious "Format Date" preset on an iPhone set to 12-hour time yields
+     * `5:00 PM`. Rejecting that would be technically correct and practically
+     * useless, so it is converted here and the rule below stays one strict
+     * format.
      */
     protected function prepareForValidation(): void
     {
-        foreach (['notes', 'due_date', 'due_time', 'list'] as $key) {
+        foreach (['notes', 'list'] as $key) {
             if ($this->has($key) && trim((string) $this->input($key)) === '') {
                 $this->merge([$key => null]);
             }
@@ -66,9 +72,17 @@ class ShortcutReminderRequest extends FormRequest
      * Accepts `17:00`, `17:00:00`, `5:00 PM` and `5:00pm`. Anything else is
      * returned untouched for the validator to refuse — guessing further would
      * mean guessing *wrong* about somebody's evening.
+     *
+     * The separator is un-Unicoded first. Since iOS 17 the system time
+     * formatter puts a NARROW NO-BREAK SPACE (U+202F) before AM/PM, not an
+     * ASCII space — it looks identical on screen and matches none of the
+     * usual patterns, so a phone doing exactly what it was told would have
+     * been refused for a character nobody can see.
      */
     private static function normaliseTime(string $time): string
     {
+        $time = trim((string) preg_replace('/[\x{00A0}\x{2000}-\x{200A}\x{202F}\x{205F}\x{3000}]/u', ' ', $time));
+
         if (preg_match('/^(\d{1,2}):(\d{2})(?::\d{2})?$/', $time, $parts) === 1) {
             return sprintf('%02d:%02d', (int) $parts[1], (int) $parts[2]);
         }
@@ -89,6 +103,20 @@ class ShortcutReminderRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
+     * **A sent-but-empty due field is a fault, not a choice**, and the two
+     * have to be told apart by the *key's presence* rather than its value.
+     * `ConvertEmptyStringsToNull` runs on every request in the global stack,
+     * so by the time a rule sees `due_time` an empty string and an absent
+     * field are both null — indistinguishable unless the rules themselves
+     * ask which keys arrived.
+     *
+     * It matters because of what the two mean. An omitted `due_time` is the
+     * one-tap shortcut saying "use my default hour". A `due_time` key that
+     * arrived empty is a Shortcut that *tried* to send a time and whose
+     * variable resolved to nothing — and defaulting there is how somebody
+     * picks 8:30, gets 9:00, and is told "Reminder set" as if it had worked
+     * (the 2026-09-02 bug).
+     *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
@@ -99,8 +127,18 @@ class ShortcutReminderRequest extends FormRequest
             // Both optional, unlike the web form's required date: a shortcut
             // that can be run with nothing but a sentence is the entire point
             // of having one. See dueDate() for what an omission means.
-            'due_date' => ['nullable', 'date_format:Y-m-d'],
-            'due_time' => ['nullable', 'date_format:H:i'],
+            //
+            // But the rules depend on whether the key was *sent*, which is
+            // the whole point — see the note on this method. A field the
+            // Shortcut posted has to hold something; one it never posted is
+            // free to be absent. `bail` so a blank field reports the one
+            // useful error instead of that plus a format complaint.
+            'due_date' => $this->has('due_date')
+                ? ['bail', 'required', 'date_format:Y-m-d']
+                : ['nullable'],
+            'due_time' => $this->has('due_time')
+                ? ['bail', 'required', 'date_format:H:i']
+                : ['nullable'],
             // A *name*, not an id. Nobody is going to hand-maintain a numeric
             // id inside a Shortcut, and a name is what they would say out loud
             // to Siri. Scoped to the poster's own lists, which is what keeps
@@ -170,6 +208,11 @@ class ShortcutReminderRequest extends FormRequest
         return [
             'due_date.date_format' => 'Send the due date as YYYY-MM-DD, e.g. 2026-09-03.',
             'due_time.date_format' => 'Send the due time as HH:MM, e.g. 17:00 or 5:00 PM.',
+            // Not "the field is required" — it plainly is not, and saying so
+            // would send the reader looking for a rule instead of for the
+            // empty variable that actually caused this.
+            'due_date.required' => "The due date arrived empty — check the variable in the Shortcut's due_date field, or delete that field to mean today.",
+            'due_time.required' => "The due time arrived empty — check the variable in the Shortcut's due_time field, or delete that field to use your default hour.",
         ];
     }
 
