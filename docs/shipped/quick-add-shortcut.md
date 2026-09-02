@@ -45,31 +45,40 @@ Shortcut on the phone needs the code deployed to the mini-PC first)
 
 ## The Shortcut recipe
 
-Build it in the Shortcuts app on the phone; six actions. Settings → Reminders →
+Build it in the Shortcuts app on the phone; eight actions. Settings → Reminders →
 **Quick add shortcut** has the endpoint and the key to paste in.
 
-1. **Ask for Input** — Input type *Text*, prompt "What's the reminder?"
-2. **Ask for Input** — Input type *Date*, prompt "What day?"
-3. **Format Date** — take the date from step 2, *Custom* format `yyyy-MM-dd`.
-4. **Ask for Input** — Input type *Time*, prompt "What time?" (then **Format Date**,
-   *Custom* format `HH:mm` — or leave it 12-hour, the endpoint accepts both).
-5. **Get Contents of URL** —
+1. **Ask for Input** — *Text*, prompt "What's the reminder?"
+2. **Ask for Input** — *Date*, prompt "What day?"
+3. **Format Date** — the date from step 2, *Custom* format `yyyy-MM-dd`.
+4. **Ask for Input** — *Time*, prompt "What time?"
+5. **Format Date** — the time from step 4, *Custom* format `HH:mm`.
+6. **Get Contents of URL** —
    - URL: `https://minipc.jackal-hippocampus.ts.net:452/api/shortcut/reminders`
    - Method: `POST`
    - Headers: `X-Shortcut-Token` → the key from settings
    - Request Body: `JSON`, three text fields: `title` (step 1), `due_date` (step 3),
-     `due_time` (step 4). Optional extras: `notes`, `list` (a list name), `is_shared`.
-6. **Get Dictionary Value** — `message` from *Contents of URL* — then **Show
-   Notification**.
+     `due_time` (step 5). Optional extras: `notes`, `list` (a list name), `is_shared`.
+7. **Get Dictionary Value** — key `message`, in *Contents of URL*.
+8. **Show Notification** — the dictionary value from step 7.
 
-Step 6 is why every response carries `message`: a refused key, a bad date and a created
+Steps 3 and 5 are not optional padding: a raw *Ask for Input* date variable renders as
+"September 3, 2026" when it lands in a text field, which the endpoint refuses. And both
+Format Date actions produce a variable called *Formatted Date* — rename them (tap the
+pill → *Rename*) before wiring step 6, or the two are indistinguishable in the picker.
+
+Step 8 is why every response carries `message`: a refused key, a bad date and a created
 reminder all land in the same notification, so the shortcut never fails silently.
 
-Then: *Add to Siri* ("add reminder"), and pin it to the Action Button, the Lock Screen or
-the home screen. Skipping the date and time prompts (deleting actions 2–4 and their JSON
-fields) gives a one-tap version that lands on the account's default reminder hour.
+Then: *Add to Siri* — the shortcut's **name** is the phrase Siri listens for, so call it
+"Add reminder" — and pin it to the Action Button, the Lock Screen or the home screen.
+Deleting actions 2–5 and their two JSON fields gives a one-tap version that lands on the
+account's default reminder hour.
 
 Tailscale has to be connected on the phone, same as for the widget.
+
+A phone-readable version of this recipe is published as an Artifact:
+<https://claude.ai/code/artifact/fc44d6c4-0395-47ef-bcf6-319b2fcdf3b4>.
 
 ---
 
