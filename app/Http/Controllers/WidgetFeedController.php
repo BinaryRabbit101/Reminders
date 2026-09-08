@@ -3,21 +3,23 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Support\ReminderEventsFeed;
 use App\Support\WidgetFeed;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * The read-only JSON feed behind the iPhone home-screen widget.
+ * The read-only JSON feeds behind the iPhone home-screen widget and, since
+ * D1, a downstream aggregator (Homestead) polling for completed chores.
  *
  * Registered in bootstrap/app.php *outside* the web middleware group, for the
  * same reason the notification actions are: the caller is Scriptable on a
- * phone, which has no session, no cookie jar and no CSRF token. The query
- * token is the entire authentication — see {@see User::byPhoneToken()} for
- * why the comparison is what it is.
+ * phone (or, for `events`, a server-side poller), which has no session, no
+ * cookie jar and no CSRF token. The query token is the entire authentication
+ * — see {@see User::byPhoneToken()} for why the comparison is what it is.
  *
  * The token is per-account rather than app-wide (two accounts share this app)
- * and the feed answers with *that account's* visible reminders, household
+ * and every feed here answers with *that account's* visible data, household
  * sharing included.
  */
 class WidgetFeedController extends Controller
@@ -33,12 +35,45 @@ class WidgetFeedController extends Controller
      */
     public function today(Request $request): JsonResponse
     {
+        return response()->json(WidgetFeed::make()->for($this->tokenHolder($request)));
+    }
+
+    /**
+     * Completed reminders since `since` (or the last 7 days, if omitted),
+     * for a downstream aggregator to diff against what it has already seen.
+     *
+     * Auth and visibility are deliberately identical to {@see today()} — see
+     * that method's docblock, which applies here unchanged. This endpoint is
+     * not a better oracle than that one: the same single 403 covers a
+     * missing, malformed or wrong token.
+     *
+     * Read-only: a `SELECT` and a projection over the append-only
+     * `reminder_completions` table, nothing written.
+     */
+    public function events(Request $request): JsonResponse
+    {
+        $user = $this->tokenHolder($request);
+
+        $since = $request->query('since');
+
+        return response()
+            ->json(ReminderEventsFeed::make()->for($user, is_string($since) ? $since : null))
+            ->header('Cache-Control', 'no-store');
+    }
+
+    /**
+     * The account a `?token=` query parameter resolves to, or the one 403
+     * every failure shares — see {@see today()}'s docblock for why a missing,
+     * malformed and wrong token must never be told apart.
+     */
+    private function tokenHolder(Request $request): User
+    {
         $token = $request->query('token');
 
         $user = User::byPhoneToken(is_string($token) ? $token : null);
 
         abort_if($user === null, 403, 'Invalid token — copy it again from Settings → Reminders.');
 
-        return response()->json(WidgetFeed::make()->for($user));
+        return $user;
     }
 }

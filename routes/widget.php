@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\Route;
 | Widget Feed Routes
 |--------------------------------------------------------------------------
 |
-| The read-only JSON the iPhone home-screen widget fetches. Registered in
+| The read-only JSON the iPhone home-screen widget fetches, plus (since D1) a
+| completions feed a downstream aggregator polls. Registered in
 | bootstrap/app.php *outside* the web middleware group: Scriptable carries no
 | session and no CSRF token, so the per-user `?token=` is the whole
 | authorization — the same trade the notification-action routes make with
@@ -23,3 +24,4 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('today', [WidgetFeedController::class, 'today'])->name('today');
+Route::get('events', [WidgetFeedController::class, 'events'])->name('events');
