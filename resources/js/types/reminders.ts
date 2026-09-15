@@ -306,3 +306,74 @@ export type Household = {
     invite_code: string;
     members: HouseholdMember[];
 };
+
+/** Which of the reminders page's two views is on screen. */
+export type RemindersView = 'list' | 'calendar';
+
+/**
+ * One reminder in one day cell of the calendar.
+ *
+ * Deliberately thinner than a `Reminder`: a cell shows a dot, a time and a
+ * title. The page carries every row in full as well, so anything that needs
+ * the whole thing (the day panel's cards, the edit sheet) joins back on
+ * `reminder_id` — except a projection, which has no row to join to.
+ */
+export type CalendarEntry = {
+    /** Unique per cell: a repeating reminder appears on many days. */
+    key: string;
+    reminder_id: number;
+    title: string;
+    /** The occurrence this entry sits on, UTC. Sorted on server-side. */
+    at: string;
+    /** "9:00 AM", already on the viewer's clock. */
+    time_label: string;
+    /**
+     * A *computed* future occurrence of a repeating reminder — there is no
+     * row at this moment yet, so it cannot be completed, snoozed or deleted.
+     * Drawn faintly, and only ever opens the series for editing.
+     */
+    is_projected: boolean;
+    is_completed: boolean;
+    is_overdue: boolean;
+    is_snoozed: boolean;
+    is_shared: boolean;
+    is_mine: boolean;
+    is_recurring: boolean;
+    /** The viewer's own list colour for the dot; null when unfiled. */
+    color_hex: string | null;
+};
+
+/** One cell of the month grid. */
+export type CalendarDay = {
+    /** Local `YYYY-MM-DD` — also what the create sheet opens on. */
+    date: string;
+    day: number;
+    /** "Monday, September 21", the day panel's heading. */
+    label: string;
+    /** False for the neighbouring months' days in the first and last weeks. */
+    in_month: boolean;
+    is_today: boolean;
+    is_weekend: boolean;
+    entries: CalendarEntry[];
+};
+
+/**
+ * The month grid, assembled by `App\Support\ReminderCalendar`. Whole weeks,
+ * Sunday to Saturday, so the first and last ones spill into the neighbouring
+ * months.
+ */
+export type CalendarMonth = {
+    /** `YYYY-MM` — what the prev/next links put back in the URL. */
+    month: string;
+    /** "September 2026". */
+    month_label: string;
+    prev_month: string;
+    next_month: string;
+    /** The month "Today" jumps to; equal to `month` when already there. */
+    current_month: string;
+    /** Today's local date, for the cell's ring. */
+    today: string;
+    /** Column headings, Sunday first. */
+    weekdays: string[];
+    weeks: CalendarDay[][];
+};

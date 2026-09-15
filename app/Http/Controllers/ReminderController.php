@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ReminderRequest;
 use App\Models\Reminder;
 use App\Support\ListColor;
+use App\Support\ReminderCalendar;
 use App\Support\ReminderPresenter;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -28,6 +29,12 @@ class ReminderController extends Controller
      * `?show_completed=1` lifts the default hiding of completed reminders.
      * Hidden by default so the list stays focused on what's still due; the
      * toggle is for the occasional "what did I finish" glance.
+     *
+     * `?view=calendar` swaps the list for a month grid of **the same rows**:
+     * both views are built from this one query, so a list chip and the
+     * completed toggle mean the same thing in either. `?month=YYYY-MM` says
+     * which month that grid is on. Like the filters, both ride in the URL —
+     * one month of one list is a linkable page and survives a reload.
      */
     public function index(Request $request): Response
     {
@@ -37,8 +44,12 @@ class ReminderController extends Controller
         $listId = $request->integer('list');
         $activeList = $listId > 0 ? $user->lists()->find($listId) : null;
         $showCompleted = $request->boolean('show_completed');
+        $isCalendar = $request->string('view')->toString() === 'calendar';
+        // Empty is the same as absent — the calendar falls back to whichever
+        // month the viewer is currently in.
+        $month = $request->string('month')->toString() ?: null;
 
-        $reminders = Reminder::query()
+        $rows = Reminder::query()
             ->visibleTo($user)
             ->with([
                 'user',
@@ -59,11 +70,20 @@ class ReminderController extends Controller
             ))
             ->when(! $showCompleted, fn ($query) => $query->pending())
             ->orderBy('due_at')
-            ->get()
-            ->map(fn (Reminder $reminder): array => $presenter->present($reminder, $user));
+            ->get();
 
         return Inertia::render('reminders/Index', [
-            'reminders' => $reminders,
+            // Both views ride on this one payload: the grid's cells carry
+            // only a title and a time, and join back to these rows by id for
+            // the day panel's full cards.
+            'reminders' => $rows->map(fn (Reminder $reminder): array => $presenter->present($reminder, $user)),
+            // Which of the two the page is drawing. The calendar payload is
+            // only built when it is being looked at — projecting recurrences
+            // is real work, and the list view has no use for it.
+            'view' => $isCalendar ? 'calendar' : 'list',
+            'calendar' => $isCalendar
+                ? ReminderCalendar::make()->for($user, $rows, $month)
+                : null,
             'timezone' => $user->timezone(),
             'defaults' => $presenter->formDefaults($user),
             'lists' => $presenter->lists($user),

@@ -1,6 +1,6 @@
 # Shipped
 
-**Status:** ✅ **15 features shipped — updated 2026-08-24**
+**Status:** ✅ **17 features shipped — updated 2026-09-15**
 
 Specs are moved here from [../todo/](../todo/) when implemented. Each entry gets a ✅
 status line, the ship date, and a close-out section covering deviations from the spec and
@@ -24,3 +24,4 @@ status line, the ship date, and a close-out section covering deviations from the
 | [auto-complete-on-dispatch.md](auto-complete-on-dispatch.md) | Opt-in: recurring reminders advance at dispatch instead of parking in Overdue | ✅ 2026-08-19 | The one exception to the 2026-08-07 recurrence amendment; advance hangs off the claim; no completion row. |
 | [silenced-reminders.md](silenced-reminders.md) | Per-reminder toggle: deliver in-app only, never a push | ✅ 2026-08-24 | Silence is the *reminder's* property (quiet hours are the recipient's); short-circuits ahead of the quiet-hours split, holds nothing, covers pre-alerts, drops already-held pushes. Primary surface is the row's snooze menu, not the edit sheet. |
 | [quick-add-shortcut.md](quick-add-shortcut.md) | Token-authed `POST /api/shortcut/reminders` + the iOS Shortcut recipe | ✅ 2026-09-02 | **One** bearer column, `phone_token` — renamed from `widget_token` hours after shipping, when a separate write key proved to be two things to paste and one silent refusal; both phone surfaces resolve it. Local→UTC now lives in `App\Support\DueMoment` (both writers call it). Every response carries `message` so the Shortcut shows one dictionary key whatever happened. |
+| [calendar-view.md](calendar-view.md) | `?view=calendar`: a month grid beside the list, with recurrences projected | ✅ 2026-09-15 | One query feeds both views, so the filters mean the same thing in either. Cells are local days (`ReminderCalendar`); repeats are projected across the grid and a projection is **not a row** — nothing to tick, snooze or delete. Grid summarises, the day panel underneath acts. |

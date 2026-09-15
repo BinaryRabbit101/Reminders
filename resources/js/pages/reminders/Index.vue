@@ -2,7 +2,9 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
     BellPlus,
+    CalendarDays,
     FolderX,
+    List,
     ListChecks,
     Pencil,
     Plus,
@@ -13,6 +15,7 @@ import ReminderListController from '@/actions/App/Http/Controllers/ReminderListC
 import AlertsBadge from '@/components/AlertsBadge.vue';
 import ListBadge from '@/components/ListBadge.vue';
 import RecurrenceBadge from '@/components/RecurrenceBadge.vue';
+import ReminderCalendar from '@/components/ReminderCalendar.vue';
 import ReminderCompleteToggle from '@/components/ReminderCompleteToggle.vue';
 import ReminderDeleteDialog from '@/components/ReminderDeleteDialog.vue';
 import ReminderFormSheet from '@/components/ReminderFormSheet.vue';
@@ -27,10 +30,12 @@ import { Switch } from '@/components/ui/switch';
 import { index as listsIndex } from '@/routes/lists';
 import { index } from '@/routes/reminders';
 import type {
+    CalendarMonth,
     ListColorOption,
     Reminder,
     ReminderFormDefaults,
     ReminderListSummary,
+    RemindersView,
 } from '@/types';
 
 // Prop names are the server's own, snake_case included — Inertia passes the
@@ -41,6 +46,8 @@ const {
     lists,
     active_list_id,
     show_completed,
+    view,
+    calendar,
     timezone,
     palette,
 } = defineProps<{
@@ -52,6 +59,14 @@ const {
     active_list_id: number | null;
     /** Whether completed reminders are included in `reminders`. */
     show_completed: boolean;
+    /** Which of the two views the page is drawing. */
+    view: RemindersView;
+    /**
+     * The month grid, built from the same filtered rows as `reminders`. Null
+     * on the list view — projecting recurrences is work the list has no use
+     * for, so the server only does it when the calendar is being looked at.
+     */
+    calendar: CalendarMonth | null;
     timezone: string;
     /** The fixed palette, for the sheet's inline "new list" dialog. */
     palette: ListColorOption[];
@@ -73,20 +88,37 @@ const editing = ref<Reminder | null>(null);
 /** The row awaiting delete confirmation; null closes the dialog. */
 const deleting = ref<Reminder | null>(null);
 
+/**
+ * The local day a calendar-initiated create should land on; null for every
+ * other way in, which opens on the server's own default moment.
+ */
+const createDate = ref<string | null>(null);
+
 function openCreate(): void {
     editing.value = null;
+    createDate.value = null;
+    sheetOpen.value = true;
+}
+
+/** Add on a particular day — the calendar's own way into the same sheet. */
+function openCreateOn(date: string): void {
+    editing.value = null;
+    createDate.value = date;
     sheetOpen.value = true;
 }
 
 /**
  * What the create form opens with — the server's defaults, but filed into
- * whichever list the view is currently filtered on. Editing an existing
- * reminder is unaffected: its own list_id always wins over this (see
+ * whichever list the view is currently filtered on, and on whichever day the
+ * calendar was asked from. The *time* stays the server's default: a day cell
+ * says nothing about what time of day was meant. Editing an existing reminder
+ * is unaffected: its own values always win over these (see
  * ReminderFormSheet's syncFromProps).
  */
 const createDefaults = computed<ReminderFormDefaults>(() => ({
     ...defaults,
     list_id: active_list_id ?? defaults.list_id,
+    due_date: createDate.value ?? defaults.due_date,
 }));
 
 function openEdit(reminder: Reminder): void {
@@ -100,21 +132,54 @@ const activeList = computed(
 );
 
 /**
- * Builds the reminders index URL for a combination of the two independent
- * filters, so setting one never silently resets the other.
+ * Builds the reminders index URL out of everything the page keeps in the
+ * URL — the two filters, which view is on, and which month that view is
+ * showing — so setting any one of them never silently resets the others.
+ *
+ * The month only travels on the calendar: on the list it would be a stale
+ * parameter waiting to surprise whoever switched back.
  */
-function filterUrl(listId: number | null, showCompleted: boolean): string {
+function filterUrl(
+    listId: number | null,
+    showCompleted: boolean,
+    nextView: RemindersView = view,
+    month: string | null = nextView === 'calendar'
+        ? (calendar?.month ?? null)
+        : null,
+): string {
     return index.url({
         query: {
             ...(listId ? { list: listId } : {}),
             ...(showCompleted ? { show_completed: 1 } : {}),
+            ...(nextView === 'calendar' ? { view: 'calendar' } : {}),
+            ...(month ? { month } : {}),
         },
     });
 }
 
-/** A list-filter link's href, carrying along the completed-visibility toggle. */
+/** A list-filter link's href, carrying along everything else that is set. */
 function filterHref(listId: number | null): string {
     return filterUrl(listId, show_completed);
+}
+
+/** The other view, with the filters — but not the month — carried across. */
+function viewHref(nextView: RemindersView): string {
+    return filterUrl(active_list_id, show_completed, nextView);
+}
+
+/** A month of the calendar, with the filters carried across. */
+function monthHref(month: string): string {
+    return filterUrl(active_list_id, show_completed, 'calendar', month);
+}
+
+/** How a view-switch tab is styled, lit or not. */
+function viewTabClass(tabView: RemindersView): string {
+    const base =
+        'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium transition-colors';
+
+    return view === tabView
+        ? `${base} bg-background text-foreground shadow-sm`
+        : `${base} text-muted-foreground hover:text-foreground`;
 }
 
 /** How a filter chip is styled, lit or not. */
@@ -181,8 +246,9 @@ function isOverdue(reminder: Reminder): boolean {
                 <h1 class="text-xl font-semibold tracking-tight">Reminders</h1>
                 <p class="text-sm break-words text-muted-foreground">
                     {{ reminders.length }}
-                    {{ reminders.length === 1 ? 'reminder' : 'reminders' }},
-                    soonest first<template v-if="activeList">
+                    {{ reminders.length === 1 ? 'reminder' : 'reminders'
+                    }}<template v-if="view === 'list'">, soonest first</template
+                    ><template v-if="activeList">
                         &middot; in {{ activeList.name }}</template
                     >
                 </p>
@@ -240,20 +306,70 @@ function isOverdue(reminder: Reminder): boolean {
             </Link>
         </div>
 
-        <div class="flex items-center gap-2">
-            <Switch
-                id="show-completed"
-                :model-value="show_completed"
-                data-test="show-completed-toggle"
-                @update:model-value="toggleShowCompleted"
-            />
-            <Label for="show-completed" class="text-sm font-normal">
-                Show completed
-            </Label>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <!--
+                The same rows, two ways of reading them — so this is a view
+                switch in the URL, not a second page: every filter, and the
+                new-reminder sheet, works identically on either side of it.
+            -->
+            <div
+                class="inline-flex items-center gap-1 rounded-lg bg-muted p-1"
+                data-test="view-switch"
+            >
+                <Link
+                    :href="viewHref('list')"
+                    :class="viewTabClass('list')"
+                    :aria-current="view === 'list' ? 'page' : undefined"
+                    preserve-scroll
+                    data-test="view-list"
+                >
+                    <List class="size-4" aria-hidden="true" />
+                    List
+                </Link>
+                <Link
+                    :href="viewHref('calendar')"
+                    :class="viewTabClass('calendar')"
+                    :aria-current="view === 'calendar' ? 'page' : undefined"
+                    preserve-scroll
+                    data-test="view-calendar"
+                >
+                    <CalendarDays class="size-4" aria-hidden="true" />
+                    Calendar
+                </Link>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <Switch
+                    id="show-completed"
+                    :model-value="show_completed"
+                    data-test="show-completed-toggle"
+                    @update:model-value="toggleShowCompleted"
+                />
+                <Label for="show-completed" class="text-sm font-normal">
+                    Show completed
+                </Label>
+            </div>
         </div>
 
+        <!--
+            The month grid and its day panel. Only the *list* gets an empty
+            state: a month with nothing in it is still a month worth drawing,
+            and the grid says "nothing on this day" itself.
+        -->
+        <ReminderCalendar
+            v-if="view === 'calendar' && calendar"
+            :calendar="calendar"
+            :reminders="reminders"
+            :prev-href="monthHref(calendar.prev_month)"
+            :next-href="monthHref(calendar.next_month)"
+            :today-href="monthHref(calendar.current_month)"
+            @edit="openEdit"
+            @delete="deleting = $event"
+            @create="openCreateOn"
+        />
+
         <div
-            v-if="reminders.length === 0"
+            v-else-if="reminders.length === 0"
             class="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center"
         >
             <div
