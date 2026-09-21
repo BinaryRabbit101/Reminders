@@ -27,6 +27,11 @@ class WidgetFeedController extends Controller
     /**
      * Everything the widget draws, for whoever holds the token.
      *
+     * `?scope=shared` narrows the whole payload — rows and counts alike — to
+     * household-shared reminders. It is for a shared display (Hearth), which
+     * has no business putting one person's private errands on the wall; any
+     * other value, or none, is the full feed the phone widget has always had.
+     *
      * Every failure is the same failure. A missing token, a malformed one and
      * a wrong one all produce one 403 with one message: the response must not
      * be an oracle that tells a stranger which accounts exist or how close a
@@ -35,7 +40,10 @@ class WidgetFeedController extends Controller
      */
     public function today(Request $request): JsonResponse
     {
-        return response()->json(WidgetFeed::make()->for($this->tokenHolder($request)));
+        return response()->json(WidgetFeed::make()->for(
+            $this->tokenHolder($request),
+            sharedOnly: $request->query('scope') === 'shared',
+        ));
     }
 
     /**

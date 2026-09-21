@@ -474,6 +474,60 @@ class WidgetFeedTest extends TestCase
             ->assertJsonPath('pending_total', 0);
     }
 
+    // ---- Shared scope (the Hearth household screen) --------------------
+
+    public function test_scope_shared_narrows_rows_and_counts_to_shared_reminders()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-03 12:00', 'America/Chicago'));
+
+        $partner = User::factory()->create();
+        $user = $this->tokenHolder();
+
+        $this->linkHousehold($partner, $user);
+
+        // Two of the viewer's own: one overdue and private, one shared.
+        $this->remind($user, '2026-08-01 09:00', 'My private overdue thing');
+        $this->remind($user, '2026-08-03 15:00', 'Our shared errand', shared: true);
+        // The partner's shared one is in, their private one was never visible.
+        $this->remind($partner, '2026-08-02 09:00', 'Their shared overdue thing', shared: true);
+        $this->remind($partner, '2026-08-03 16:00', 'Their private thing');
+        // A shared one next week feeds upcoming / next_upcoming.
+        $this->remind($user, '2026-08-05 09:00', 'Shared next week', shared: true);
+        $this->remind($user, '2026-08-04 09:00', 'Private tomorrow');
+
+        $full = $this->getJson($this->feedUrl($user))->assertOk();
+        $full->assertJsonCount(3, 'today');
+        $full->assertJsonPath('overdue_count', 2);
+        $full->assertJsonPath('pending_total', 5);
+        $full->assertJsonPath('next_upcoming.title', 'Our shared errand');
+
+        $shared = $this->getJson($this->feedUrl($user).'&scope=shared')->assertOk();
+
+        $shared->assertJsonCount(2, 'today');
+        $shared->assertJsonPath('today.0.title', 'Their shared overdue thing');
+        $shared->assertJsonPath('today.1.title', 'Our shared errand');
+        // The counts narrow with the rows: one overdue, three pending in all.
+        $shared->assertJsonPath('overdue_count', 1);
+        $shared->assertJsonPath('pending_total', 3);
+        // Upcoming skips the private one tomorrow for the shared one after.
+        $shared->assertJsonCount(1, 'upcoming');
+        $shared->assertJsonPath('upcoming.0.title', 'Shared next week');
+        $shared->assertJsonPath('next_upcoming.title', 'Our shared errand');
+    }
+
+    public function test_any_other_scope_value_is_the_full_feed()
+    {
+        Carbon::setTestNow(Carbon::parse('2026-08-03 12:00', 'America/Chicago'));
+
+        $user = $this->tokenHolder();
+        $this->remind($user, '2026-08-03 15:00', 'Private thing');
+
+        $this->getJson($this->feedUrl($user).'&scope=everything')
+            ->assertOk()
+            ->assertJsonCount(1, 'today')
+            ->assertJsonPath('pending_total', 1);
+    }
+
     // ---- List colours --------------------------------------------------
 
     public function test_a_row_carries_its_list_colour_for_the_owner()

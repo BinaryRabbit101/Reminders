@@ -7,6 +7,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use DateTimeInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 
@@ -77,6 +78,14 @@ final class WidgetFeed
      * counting only reminder rows against MAX_ROWS is what let a quiet day's
      * upcoming list run text past the widget's own frame.
      *
+     * `$sharedOnly` narrows every part of the feed — rows *and* counts — to
+     * reminders flagged shared, whoever in the household owns them. It exists
+     * for a shared surface (the Hearth household screen) where one person's
+     * private errands have no business on the wall; the phone widget never
+     * sets it. Narrowing the counts too is the point: a "19 overdue" line
+     * above three shared rows would be counting things the screen refuses to
+     * show.
+     *
      * @return array{
      *     overdue_count: int,
      *     today: list<array{time: string, title: string, list_color: string|null, is_overdue: bool}>,
@@ -86,7 +95,7 @@ final class WidgetFeed
      *     open_url: string,
      * }
      */
-    public function for(User $user, ?DateTimeInterface $now = null): array
+    public function for(User $user, ?DateTimeInterface $now = null, bool $sharedOnly = false): array
     {
         $now = CarbonImmutable::parse($now ?? Carbon::now())->utc();
         $timezone = $user->timezone();
@@ -95,7 +104,7 @@ final class WidgetFeed
 
         $rows = [];
 
-        foreach ($this->pendingThrough($user, $endOfToday) as $reminder) {
+        foreach ($this->pendingThrough($user, $endOfToday, $sharedOnly) as $reminder) {
             // A snooze moves the moment, so a reminder snoozed to 3pm is a
             // 3pm row — the same definition the board buckets on and the
             // delivery engine sends on.
@@ -119,7 +128,7 @@ final class WidgetFeed
         }
 
         if ($spareRows > 0) {
-            foreach ($this->upcomingAfter($user, $endOfToday, $spareRows) as $reminder) {
+            foreach ($this->upcomingAfter($user, $endOfToday, $spareRows, $sharedOnly) as $reminder) {
                 $at = $reminder->effectiveDueAt();
 
                 $upcoming[] = [
@@ -134,15 +143,13 @@ final class WidgetFeed
             // Counted rather than tallied from the rows above: the list is
             // capped and the count is not, and "3 overdue" with two rows
             // showing is the whole reason the number is there.
-            'overdue_count' => Reminder::query()
-                ->visibleTo($user)
-                ->pending()
+            'overdue_count' => $this->pending($user, $sharedOnly)
                 ->whereRaw(Reminder::EFFECTIVE_DUE_AT.' < ?', [$now->format('Y-m-d H:i:s')])
                 ->count(),
             'today' => $rows,
             'upcoming' => $upcoming,
-            'next_upcoming' => $this->nextUpcoming($user, $now, $local),
-            'pending_total' => Reminder::query()->visibleTo($user)->pending()->count(),
+            'next_upcoming' => $this->nextUpcoming($user, $now, $local, $sharedOnly),
+            'pending_total' => $this->pending($user, $sharedOnly)->count(),
             // Where a tap lands. `app.url` rather than the request's own host:
             // the feed is fetched over Tailscale by a background process, and
             // the URL has to be the one a browser should open, which is the
@@ -163,11 +170,9 @@ final class WidgetFeed
      *
      * @return array{when: string, title: string}|null
      */
-    private function nextUpcoming(User $user, CarbonImmutable $now, CarbonInterface $local): ?array
+    private function nextUpcoming(User $user, CarbonImmutable $now, CarbonInterface $local, bool $sharedOnly): ?array
     {
-        $next = Reminder::query()
-            ->visibleTo($user)
-            ->pending()
+        $next = $this->pending($user, $sharedOnly)
             ->whereRaw(Reminder::EFFECTIVE_DUE_AT.' > ?', [$now->format('Y-m-d H:i:s')])
             ->orderByRaw(Reminder::EFFECTIVE_DUE_AT.' asc')
             ->first();
@@ -195,12 +200,10 @@ final class WidgetFeed
      *
      * @return Collection<int, Reminder>
      */
-    private function pendingThrough(User $user, CarbonInterface $endOfToday): Collection
+    private function pendingThrough(User $user, CarbonInterface $endOfToday, bool $sharedOnly): Collection
     {
-        return Reminder::query()
-            ->visibleTo($user)
+        return $this->pending($user, $sharedOnly)
             ->with(['list', 'filings' => fn ($query) => $query->where('user_id', $user->id)->with('list')])
-            ->pending()
             ->whereRaw(Reminder::EFFECTIVE_DUE_AT.' <= ?', [
                 $endOfToday->copy()->utc()->format('Y-m-d H:i:s'),
             ])
@@ -221,18 +224,31 @@ final class WidgetFeed
      *
      * @return Collection<int, Reminder>
      */
-    private function upcomingAfter(User $user, CarbonInterface $endOfToday, int $limit): Collection
+    private function upcomingAfter(User $user, CarbonInterface $endOfToday, int $limit, bool $sharedOnly): Collection
     {
-        return Reminder::query()
-            ->visibleTo($user)
+        return $this->pending($user, $sharedOnly)
             ->with(['list', 'filings' => fn ($query) => $query->where('user_id', $user->id)->with('list')])
-            ->pending()
             ->whereRaw(Reminder::EFFECTIVE_DUE_AT.' > ?', [
                 $endOfToday->copy()->utc()->format('Y-m-d H:i:s'),
             ])
             ->orderByRaw(Reminder::EFFECTIVE_DUE_AT.' asc')
             ->limit($limit)
             ->get();
+    }
+
+    /**
+     * Every query in this feed starts here: what the viewer may see, still
+     * open, and — for a shared surface — only what is flagged shared. One
+     * place, so the rows and the counts can never disagree about scope.
+     *
+     * @return Builder<Reminder>
+     */
+    private function pending(User $user, bool $sharedOnly): Builder
+    {
+        return Reminder::query()
+            ->visibleTo($user)
+            ->pending()
+            ->when($sharedOnly, fn (Builder $query) => $query->where('is_shared', true));
     }
 
     /**
