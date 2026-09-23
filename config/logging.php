@@ -63,6 +63,11 @@ return [
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
+            // Group-writable: php-fpm (www-data) and the scheduler's queue
+            // worker (gemini, in group www-data) both append here. Whichever
+            // creates the file first must not lock the other out — a 0644 log
+            // made RunCompletionHook fail on its Log::info and retry.
+            'permission' => 0664,
         ],
 
         'daily' => [
