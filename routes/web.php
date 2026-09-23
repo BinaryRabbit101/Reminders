@@ -28,6 +28,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // first two — tapped from a push notification, no session — live in
     // routes/notification-actions.php.
     Route::post('reminders/{reminder}/complete', [ReminderActionController::class, 'complete'])->name('reminders.complete');
+    // "How did it go?" — the page a push's Complete button opens for a
+    // reminder that asks for a note, because a lock-screen button cannot
+    // take text. It posts to reminders.complete like any other tick.
+    Route::get('reminders/{reminder}/note', [ReminderActionController::class, 'note'])->name('reminders.note');
     Route::post('reminders/{reminder}/snooze', [ReminderActionController::class, 'snooze'])->name('reminders.snooze');
     Route::post('reminders/{reminder}/restore', [ReminderActionController::class, 'restore'])->name('reminders.restore');
     // The one-tap twin of the edit sheet's silence checkbox, from the row's

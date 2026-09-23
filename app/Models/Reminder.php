@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Jobs\RunCompletionHook;
 use App\Support\RecurrenceCalculator;
 use App\Support\RecurrenceRule;
 use Carbon\CarbonImmutable;
@@ -26,6 +27,7 @@ use Illuminate\Support\Collection;
  * @property Carbon $due_at
  * @property bool $is_shared
  * @property bool $is_silenced
+ * @property bool $ask_for_note
  * @property string|null $repeat_unit
  * @property int $repeat_interval
  * @property list<int>|null $repeat_weekdays
@@ -42,7 +44,7 @@ use Illuminate\Support\Collection;
  * @property-read ReminderList|null $list
  */
 #[Fillable([
-    'user_id', 'list_id', 'title', 'notes', 'due_at', 'is_shared', 'is_silenced',
+    'user_id', 'list_id', 'title', 'notes', 'due_at', 'is_shared', 'is_silenced', 'ask_for_note',
     'repeat_unit', 'repeat_interval', 'repeat_weekdays', 'repeat_until', 'repeat_anchor_day',
     'repeat_month_mode', 'repeat_week_of_month', 'auto_complete',
     'completed_at', 'snoozed_until',
@@ -76,6 +78,12 @@ class Reminder extends Model
             // still lands in the notification history and on the unread badge
             // — it just never buzzes a phone (silenced-reminders spec).
             'is_silenced' => 'boolean',
+            // "Ask me how it went when I tick this off." Changes the
+            // completion path on every surface — the in-app tick opens a note
+            // dialog, the push's Complete button opens the note page — but
+            // never the delivery engine: when and whether it fires is exactly
+            // what it was.
+            'ask_for_note' => 'boolean',
             'repeat_interval' => 'integer',
             'repeat_weekdays' => 'array',
             // A local calendar day, not an instant: only ever read through
@@ -381,25 +389,49 @@ class Reminder extends Model
      * Row-level by design: a shared reminder is one row, so one household
      * member completing it completes it for both (shared-reminders spec).
      *
+     * `$note` is the answer to "How did it go?" — asked by the in-app dialog
+     * and the note page when the reminder has `ask_for_note`, but accepted
+     * from any caller, because a note is a fact about *this* completion and
+     * is filed on the {@see ReminderCompletion} row created here, never on
+     * the reminder. It is trimmed, and a note that trims to nothing is no
+     * note at all: stored as null, so "has a note" is one `whereNotNull`
+     * everywhere and a stray space from a phone keyboard never fires the
+     * hook below.
+     *
+     * A completion that *does* carry a note is handed to the completion hook
+     * ({@see RunCompletionHook}) — an owner-configured server command that
+     * does something with it elsewhere. The hook is queued, never run inline:
+     * it may take minutes (it can call out to an AI), and the person who just
+     * tapped "Save + done" must not wait on it, nor see their completion
+     * rolled back because some other program failed. Reminders knows nothing
+     * about what the hook is for; it only promises to hand it the note.
+     * Unconfigured (the default) means nothing is dispatched at all.
+     *
      * @return array{completed_at: string|null, due_at: string, snoozed_until: string|null}
      */
-    public function complete(RecurrenceCalculator $calculator): array
+    public function complete(RecurrenceCalculator $calculator, ?string $note = null): array
     {
         $prior = $this->currentState();
         $occurredAt = $this->effectiveDueAt();
+        $note = $note === null ? null : trim($note);
 
         if (! $this->advanceOrComplete($calculator)) {
             $this->forceFill(['completed_at' => Carbon::now()])->save();
         }
 
-        ReminderCompletion::query()->create([
+        $completion = ReminderCompletion::query()->create([
             'user_id' => $this->user_id,
             'reminder_id' => $this->id,
             'title' => $this->title,
             'is_shared' => $this->is_shared,
             'occurred_at' => $occurredAt,
             'completed_at' => Carbon::now(),
+            'note' => $note === '' ? null : $note,
         ]);
+
+        if ($completion->note !== null && RunCompletionHook::isConfigured()) {
+            RunCompletionHook::dispatch($completion->id);
+        }
 
         return $prior;
     }

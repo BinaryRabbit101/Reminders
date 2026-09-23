@@ -114,6 +114,7 @@ final class ReminderPresenter
      *     snooze_label: string|null,
      *     is_shared: bool,
      *     is_silenced: bool,
+     *     ask_for_note: bool,
      *     is_mine: bool,
      *     owner_label: string|null,
      *     list: array{id: int, name: string, color: string, color_hex: string}|null,
@@ -171,6 +172,11 @@ final class ReminderPresenter
             // checkbox. A property of the reminder, not the viewer, so a
             // shared silenced reminder reads silent for everyone.
             'is_silenced' => $reminder->is_silenced,
+            // Drives the edit sheet's checkbox and, more importantly, the
+            // tick itself: completing a reminder with this set opens the
+            // "How did it go?" dialog instead of posting straight away
+            // (useReminderActions). A property of the reminder, like silence.
+            'ask_for_note' => $reminder->ask_for_note,
             'is_mine' => $isMine,
             // Only somebody else's reminder needs a name on it; the client
             // renders the string, it never assembles one.
@@ -257,6 +263,7 @@ final class ReminderPresenter
      *     due_time: string,
      *     is_shared: bool,
      *     is_silenced: bool,
+     *     ask_for_note: bool,
      *     can_share: bool,
      *     list_id: int|null,
      *     repeat_unit: string|null,
@@ -285,6 +292,8 @@ final class ReminderPresenter
             'is_shared' => false,
             // New reminders buzz, like every existing one does.
             'is_silenced' => false,
+            // New reminders tick off in one tap, like every existing one.
+            'ask_for_note' => false,
             'can_share' => $user->household_id !== null,
             // New reminders start unfiled; the select opens on "No list".
             'list_id' => null,

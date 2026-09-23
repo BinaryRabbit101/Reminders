@@ -26,6 +26,7 @@ class ReminderFactory extends Factory
             'due_at' => Carbon::now()->addHours(fake()->numberBetween(1, 240)),
             'is_shared' => false,
             'is_silenced' => false,
+            'ask_for_note' => false,
             'repeat_unit' => null,
             'repeat_interval' => 1,
             'repeat_weekdays' => null,
@@ -89,6 +90,17 @@ class ReminderFactory extends Factory
     {
         return $this->state(fn (array $attributes): array => [
             'is_silenced' => true,
+        ]);
+    }
+
+    /**
+     * A reminder that asks "How did it go?" when it is ticked off, and whose
+     * push Complete button opens the note page rather than completing blind.
+     */
+    public function asksForNote(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'ask_for_note' => true,
         ]);
     }
 

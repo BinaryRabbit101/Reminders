@@ -25,6 +25,11 @@ use Illuminate\Support\Carbon;
  * entry has to keep reading correctly after the reminder is retitled,
  * un-shared, or deleted out from under it.
  *
+ * `note` is the one column the user writes rather than the app: the answer to
+ * "How did it go?" on a reminder with `ask_for_note`. Null when none was
+ * given, which is also what fires — or rather, does not fire — the completion
+ * hook ({@see Reminder::complete()}).
+ *
  * @property int $id
  * @property int $user_id
  * @property int|null $reminder_id
@@ -32,10 +37,11 @@ use Illuminate\Support\Carbon;
  * @property bool $is_shared
  * @property Carbon $occurred_at
  * @property Carbon $completed_at
+ * @property string|null $note
  * @property-read User $user
  * @property-read Reminder|null $reminder
  */
-#[Fillable(['user_id', 'reminder_id', 'title', 'is_shared', 'occurred_at', 'completed_at'])]
+#[Fillable(['user_id', 'reminder_id', 'title', 'is_shared', 'occurred_at', 'completed_at', 'note'])]
 class ReminderCompletion extends Model
 {
     /**

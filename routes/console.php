@@ -41,3 +41,28 @@ Schedule::command('reminders:send-due')->everyMinute()->withoutOverlapping();
 // worst a timezone shift could do here is move the deletion of a 90-day-old
 // row by a few hours.
 Schedule::command('reminders:prune-notifications')->daily()->withoutOverlapping();
+
+// The queue worker, run off the same every-minute cron rather than as a
+// daemon of its own — the box has no supervisor for this app, and the only
+// thing ever queued is the completion hook (RunCompletionHook), which is rare
+// and never urgent to the second. So: wake every minute, drain whatever is
+// waiting, exit.
+//
+// - `--stop-when-empty` is what makes it a drain rather than a daemon.
+// - `--timeout=960` sits just over the job's own ceiling (930s) so the job's
+//   timeout, not the worker's, is what normally fires; `retry_after` on the
+//   database queue (config/queue.php) sits over both.
+// - `--max-time=1800` caps one drain at half an hour — a pile-up of slow
+//   hooks yields to the next tick instead of holding the mutex for good.
+// - `--tries=3` matches the job's own `$tries` as a floor for anything
+//   queued later without one.
+// - `withoutOverlapping()` keeps two drains from racing each other over the
+//   same row, and `runInBackground()` stops a fifteen-minute hook from
+//   holding up this minute's `schedule:run` (the delivery engine above runs
+//   first either way, but nothing added after this should wait on a hook).
+//
+// No timezone: "every minute" has no time-of-day component (see above).
+Schedule::command('queue:work --stop-when-empty --tries=3 --timeout=960 --max-time=1800')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground();

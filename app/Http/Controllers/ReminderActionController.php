@@ -2,14 +2,18 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\CompleteReminderRequest;
 use App\Http\Requests\ReminderStateRequest;
 use App\Http\Requests\SnoozeRequest;
 use App\Models\Reminder;
+use App\Notifications\ReminderDueNotification;
 use App\Support\RecurrenceCalculator;
 use App\Support\ReminderPresenter;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
+use Inertia\Response;
 
 /**
  * Acting on a reminder from inside the app: tick it off, push it out, or take
@@ -36,15 +40,19 @@ class ReminderActionController extends Controller
      * and posts it back to {@see restore()} if the user changes their mind.
      * Nothing is kept server-side between the two requests, so the window can
      * never go stale, leak between users, or need cleaning up.
+     *
+     * An optional `note` rides along from the "How did it go?" dialog and the
+     * note page ({@see note()}); it is filed on the completion, and Undo
+     * leaves it there like the rest of the completion log.
      */
-    public function complete(Reminder $reminder): RedirectResponse
+    public function complete(CompleteReminderRequest $request, Reminder $reminder): RedirectResponse
     {
         Gate::authorize('complete', $reminder);
 
         // The owner's calculator, not the acting user's: a household member
         // completing a shared daily reminder must not drag its series onto
         // their own clock (RecurrenceCalculator::for()).
-        $prior = $reminder->complete(RecurrenceCalculator::for($reminder->user));
+        $prior = $reminder->complete(RecurrenceCalculator::for($reminder->user), $request->note());
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -57,7 +65,58 @@ class ReminderActionController extends Controller
             ],
         ]);
 
+        // Back to the page the tick came from — except the note page, which
+        // is a single-purpose stop on the way somewhere else: going "back"
+        // to it would show a form for the very reminder just completed. It
+        // lands on Today instead, toast and Undo intact.
+        if ($this->cameFromNotePage($reminder)) {
+            return to_route('today');
+        }
+
         return $this->back();
+    }
+
+    /**
+     * The "How did it go?" page — where a push notification's Complete button
+     * sends a reminder with `ask_for_note`, since a lock-screen button cannot
+     * take text ({@see ReminderDueNotification}).
+     *
+     * Unlike the push's other buttons this is an ordinary session route, not
+     * a signed one: writing a note means opening the app anyway, so the user
+     * is signed in (or signs in and is sent back here), and the page is
+     * guarded by the same `complete` ability as the tick itself — visible to
+     * whoever may complete the reminder, forbidden to everyone else.
+     *
+     * The page itself only renders; saving posts to {@see complete()} like
+     * every other tick. What it has to work out is whether there is still
+     * anything to complete, because a push can be tapped long after the fact:
+     *
+     * - a one-off that already has a `completed_at` is plainly done;
+     * - a repeating reminder never has one — it steps on to its next
+     *   occurrence instead — so the push stamps the `due_at` it was sent for
+     *   as `?due=<unix>`, and a series that has moved past it has had that
+     *   occurrence dealt with. Raw `due_at` rather than the effective moment
+     *   on purpose: a snooze moves the occurrence without handling it, and
+     *   a snoozed reminder is still very much waiting for its note.
+     *
+     * Either way the page says so and offers the way to Today rather than a
+     * form that would complete the *next* occurrence by mistake. Visited with
+     * no `?due=` (typed in, bookmarked) it trusts the reminder as it stands.
+     */
+    public function note(Request $request, Reminder $reminder): Response
+    {
+        Gate::authorize('complete', $reminder);
+
+        $user = $request->user();
+
+        $isDone = $reminder->completed_at !== null
+            || ($request->filled('due') && $reminder->due_at->getTimestamp() !== $request->integer('due'));
+
+        return Inertia::render('reminders/Note', [
+            'reminder' => ReminderPresenter::for($user)->present($reminder, $user),
+            'is_done' => $isDone,
+            'note_max' => CompleteReminderRequest::NOTE_MAX,
+        ]);
     }
 
     /**
@@ -135,6 +194,21 @@ class ReminderActionController extends Controller
         );
 
         return $this->back();
+    }
+
+    /**
+     * Whether the request came from this reminder's note page.
+     *
+     * Read off the previous URL (the session's record of the last page
+     * visited, or the Referer) and compared by path alone, so the `?due=`
+     * query and whichever host the page was reached on do not matter.
+     */
+    private function cameFromNotePage(Reminder $reminder): bool
+    {
+        $previous = parse_url(url()->previous(), PHP_URL_PATH);
+        $note = parse_url(route('reminders.note', $reminder), PHP_URL_PATH);
+
+        return is_string($previous) && $previous === $note;
     }
 
     /**

@@ -49,12 +49,25 @@ self.addEventListener('notificationclick', (event) => {
     const data = event.notification.data ?? {};
     const url = data.url ?? '/today';
 
-    // An action button acts and stops there: the whole point of "Complete"
-    // on the lock screen is not having to open the app. The URL was signed
-    // when the push was built (this worker has no CSRF token or session to
-    // offer), so a bare POST is all that is needed — and a failed one is
+    // An action button normally acts and stops there: the whole point of
+    // "Complete" on the lock screen is not having to open the app. The URL was
+    // signed when the push was built (this worker has no CSRF token or session
+    // to offer), so a bare POST is all that is needed — and a failed one is
     // swallowed, because there is nowhere to report it to.
+    //
+    // The one exception is a button that needs the app after all: a reminder
+    // that asks for a note ships `{action}_open` instead of `{action}_url`,
+    // because a note needs a keyboard and a lock-screen button has none. That
+    // one opens (or focuses) a window on the page it names, exactly the way a
+    // tap on the notification body does.
     if (event.action) {
+        const openUrl = data[`${event.action}_open`];
+
+        if (openUrl) {
+            event.waitUntil(focusOrOpen(openUrl));
+            return;
+        }
+
         const actionUrl = data[`${event.action}_url`];
 
         if (actionUrl) {
@@ -63,15 +76,19 @@ self.addEventListener('notificationclick', (event) => {
         }
     }
 
-    event.waitUntil(
-        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
-            for (const client of windows) {
-                if (client.url.startsWith(self.registration.scope) && 'focus' in client) {
-                    client.navigate(url);
-                    return client.focus();
-                }
-            }
-            return self.clients.openWindow(url);
-        }),
-    );
+    event.waitUntil(focusOrOpen(url));
 });
+
+// Bring the app to `url`: reuse a window already open on this app (navigating
+// it there) when there is one, otherwise open a new one.
+function focusOrOpen(url) {
+    return self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+        for (const client of windows) {
+            if (client.url.startsWith(self.registration.scope) && 'focus' in client) {
+                client.navigate(url);
+                return client.focus();
+            }
+        }
+        return self.clients.openWindow(url);
+    });
+}

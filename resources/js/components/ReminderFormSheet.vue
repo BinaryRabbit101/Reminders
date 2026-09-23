@@ -6,6 +6,7 @@ import {
     CheckCheck,
     ListPlus,
     Minus,
+    NotebookPen,
     Plus,
     Users,
 } from '@lucide/vue';
@@ -77,6 +78,7 @@ const initial = computed(() => ({
     due_time: reminder?.due_time ?? defaults.due_time,
     is_shared: reminder?.is_shared ?? defaults.is_shared,
     is_silenced: reminder?.is_silenced ?? defaults.is_silenced,
+    ask_for_note: reminder?.ask_for_note ?? defaults.ask_for_note,
 }));
 
 /** The repeat unit select — "does not repeat" is just another option in it. */
@@ -847,6 +849,42 @@ function submitListDialog(): void {
                             </div>
                         </div>
                         <InputError :message="errors.is_silenced" />
+                    </div>
+
+                    <!--
+                        Ask for a note. Next to silence because it is the
+                        same kind of switch — it changes what happens around
+                        the reminder, never when it fires — and, like silence,
+                        it applies to a one-off and a series alike, so it can
+                        stay uncontrolled on `:default-value` too.
+                    -->
+                    <div class="grid gap-2">
+                        <div
+                            class="flex items-start gap-3 rounded-lg border p-3"
+                        >
+                            <Checkbox
+                                id="ask_for_note"
+                                name="ask_for_note"
+                                value="1"
+                                :default-value="initial.ask_for_note"
+                                class="mt-0.5"
+                                data-test="ask-for-note-toggle"
+                            />
+                            <div class="grid gap-1">
+                                <Label
+                                    for="ask_for_note"
+                                    class="flex items-center gap-1.5"
+                                >
+                                    <NotebookPen class="size-3.5 shrink-0" />
+                                    Ask for a note when done
+                                </Label>
+                                <p class="text-sm text-muted-foreground">
+                                    Ticking it off asks how it went. The note is
+                                    optional and is kept with that completion.
+                                </p>
+                            </div>
+                        </div>
+                        <InputError :message="errors.ask_for_note" />
                     </div>
 
                     <!--

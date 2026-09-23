@@ -95,6 +95,9 @@ class ReminderRequest extends FormRequest
             // `auto_complete` it is shaped in reminderAttributes() alongside
             // `is_shared` rather than with the repeat rule.
             'is_silenced' => ['nullable', 'boolean'],
+            // Also meaningful on any reminder, and shaped alongside
+            // `is_silenced` for the same reason.
+            'ask_for_note' => ['nullable', 'boolean'],
             // The pre-alert chips, posted as `alerts[]` offsets in minutes.
             // A closed allow-list rather than a free number: it is the same
             // set the picker offers, and it is what keeps a "0 minutes
@@ -116,6 +119,7 @@ class ReminderRequest extends FormRequest
             'due_time' => 'due time',
             'is_shared' => 'sharing',
             'is_silenced' => 'silence',
+            'ask_for_note' => 'ask for a note',
             'list_id' => 'list',
             'repeat_unit' => 'repeat',
             'repeat_interval' => 'repeat interval',
@@ -183,6 +187,7 @@ class ReminderRequest extends FormRequest
      *     due_at: Carbon,
      *     is_shared: bool,
      *     is_silenced: bool,
+     *     ask_for_note: bool,
      *     list_id?: int|null,
      *     repeat_unit: string|null,
      *     repeat_interval: int,
@@ -213,6 +218,9 @@ class ReminderRequest extends FormRequest
             // `auto_complete` there is nothing to normalise — a one-off is as
             // silenceable as a series.
             'is_silenced' => $this->boolean('is_silenced'),
+            // The same unticked-checkbox reading again: absent means off, or
+            // switching the note prompt back off would never take.
+            'ask_for_note' => $this->boolean('ask_for_note'),
             ...$this->listAttributes(),
             ...$this->recurrenceAttributes($local),
         ];

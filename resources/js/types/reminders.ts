@@ -178,6 +178,12 @@ export type Reminder = {
      */
     is_silenced: boolean;
     /**
+     * Whether ticking this reminder off asks "How did it go?" first. The
+     * answer is optional and is kept on the completion, not the reminder; a
+     * push for it opens the note page instead of completing blind.
+     */
+    ask_for_note: boolean;
+    /**
      * The pre-alerts set on this reminder, nearest horizon first. Empty for
      * most rows — which is exactly what the bell glyph keys off.
      */
@@ -212,6 +218,8 @@ export type ReminderFormDefaults = {
     is_shared: boolean;
     /** New reminders buzz, like every existing one does. */
     is_silenced: boolean;
+    /** New reminders tick off in one tap, with no note prompt. */
+    ask_for_note: boolean;
     /** False when the account has no household — the switch is not rendered. */
     can_share: boolean;
     /** New reminders start unfiled; the select opens on "No list". */

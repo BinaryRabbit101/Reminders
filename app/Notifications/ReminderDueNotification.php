@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Http\Controllers\ReminderActionController;
 use App\Models\Reminder;
 use App\Support\SnoozePresets;
 use Carbon\CarbonImmutable;
@@ -105,9 +106,26 @@ class ReminderDueNotification extends Notification
      *
      * Note that these URLs bake in `APP_URL` at generation time — correct
      * production URL generation is a deployment concern (deployment-https).
+     *
+     * A reminder with `ask_for_note` changes one thing: its Complete button
+     * cannot complete blind, because the whole point is writing down how it
+     * went and a lock-screen button cannot take text. So instead of a
+     * `complete_url` to POST, it carries a `complete_open` — the note page,
+     * which `sw.js` *opens* rather than posts to — and tapping the body of
+     * the notification goes to the same page. Snooze is untouched, and every
+     * other reminder's payload is exactly what it always was.
      */
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
+        $data = [
+            'url' => route('today'),
+            'reminder_id' => $this->reminder->id,
+            'complete_url' => $this->actionUrl('notification-actions.complete'),
+            'snooze_url' => $this->actionUrl('notification-actions.snooze', [
+                'preset' => SnoozePresets::NOTIFICATION_DEFAULT,
+            ]),
+        ];
+
         return (new WebPushMessage)
             ->title($this->pushTitle())
             ->body($this->body())
@@ -118,14 +136,41 @@ class ReminderDueNotification extends Notification
             ->tag('reminder-'.$this->reminder->id)
             ->action('Complete', 'complete')
             ->action('Snooze 1h', 'snooze')
-            ->data([
-                'url' => route('today'),
-                'reminder_id' => $this->reminder->id,
-                'complete_url' => $this->actionUrl('notification-actions.complete'),
-                'snooze_url' => $this->actionUrl('notification-actions.snooze', [
-                    'preset' => SnoozePresets::NOTIFICATION_DEFAULT,
-                ]),
-            ]);
+            ->data(self::withNotePage($this->reminder, $data));
+    }
+
+    /**
+     * Swap a push payload's blind Complete for the note page, when the
+     * reminder asks for a note — shared with the pre-alert push
+     * ({@see ReminderPreAlertNotification}), whose Complete button is the
+     * same button with the same problem.
+     *
+     * The page URL is a plain session route, not a signed one: it only
+     * *shows* a form, and saving it posts through the ordinary, logged-in
+     * complete endpoint. It is absolute (`APP_URL`, like the signed ones) so
+     * the service worker can open it as-is, and it carries the reminder's
+     * `due_at` at send time as `?due=` — the occurrence this push is about —
+     * so a push tapped after that occurrence was already dealt with can say
+     * so rather than complete the next one ({@see
+     * ReminderActionController::note()}).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function withNotePage(Reminder $reminder, array $data): array
+    {
+        if (! $reminder->ask_for_note) {
+            return $data;
+        }
+
+        $notePage = route('reminders.note', [
+            'reminder' => $reminder->id,
+            'due' => $reminder->due_at->getTimestamp(),
+        ]);
+
+        unset($data['complete_url']);
+
+        return [...$data, 'url' => $notePage, 'complete_open' => $notePage];
     }
 
     /**

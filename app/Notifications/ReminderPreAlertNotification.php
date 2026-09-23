@@ -113,24 +113,46 @@ class ReminderPreAlertNotification extends Notification
             ->tag('reminder-'.$this->reminderId().'-alert-'.$this->alert->id)
             ->action('Complete', 'complete')
             ->action('Snooze 10m', 'snooze')
-            ->data([
-                'url' => route('today'),
-                'reminder_id' => $this->reminderId(),
-                'alert_id' => $this->alert->id,
-                'complete_url' => URL::temporarySignedRoute(
-                    'notification-actions.complete',
-                    $this->expiry(),
-                    ['reminder' => $this->reminderId()],
-                ),
-                'snooze_url' => URL::temporarySignedRoute(
-                    'notification-actions.alerts.snooze',
-                    $this->expiry(),
-                    [
-                        'alert' => $this->alert->id,
-                        'preset' => SnoozePresets::PRE_ALERT_NOTIFICATION_DEFAULT,
-                    ],
-                ),
-            ]);
+            ->data($this->data());
+    }
+
+    /**
+     * The push's data payload: where a tap goes, and each button's endpoint.
+     *
+     * A reminder with `ask_for_note` gets the due notification's treatment —
+     * Complete opens the note page (`complete_open`) instead of posting a
+     * blind `complete_url`, and a tap on the body goes there too — through
+     * the very same {@see ReminderDueNotification::withNotePage()}, so the
+     * two pushes cannot drift apart on it.
+     *
+     * @return array<string, mixed>
+     */
+    private function data(): array
+    {
+        $data = [
+            'url' => route('today'),
+            'reminder_id' => $this->reminderId(),
+            'alert_id' => $this->alert->id,
+            'complete_url' => URL::temporarySignedRoute(
+                'notification-actions.complete',
+                $this->expiry(),
+                ['reminder' => $this->reminderId()],
+            ),
+            'snooze_url' => URL::temporarySignedRoute(
+                'notification-actions.alerts.snooze',
+                $this->expiry(),
+                [
+                    'alert' => $this->alert->id,
+                    'preset' => SnoozePresets::PRE_ALERT_NOTIFICATION_DEFAULT,
+                ],
+            ),
+        ];
+
+        $reminder = $this->alert->reminder;
+
+        return $reminder instanceof Reminder
+            ? ReminderDueNotification::withNotePage($reminder, $data)
+            : $data;
     }
 
     /**

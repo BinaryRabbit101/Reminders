@@ -40,7 +40,12 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            // Longer than the slowest job this app queues, or a job still
+            // running would be handed out a second time: the completion hook
+            // may run for up to RunCompletionHook::$timeout (930s), so the
+            // stock 90 would re-run every hook that thinks for over a minute
+            // and a half.
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 990),
             'after_commit' => false,
         ],
 
