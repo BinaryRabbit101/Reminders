@@ -39,6 +39,8 @@ class ShortcutReminderController extends Controller
 
         $reminder = $user->reminders()->create($request->reminderAttributes());
 
+        $reminder->announceShare();
+
         $label = ReminderPresenter::for($user)->label($reminder->due_at);
 
         return response()->json([

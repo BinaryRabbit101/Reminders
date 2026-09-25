@@ -5,8 +5,10 @@ namespace Tests\Feature;
 use App\Models\Household;
 use App\Models\Reminder;
 use App\Models\User;
+use App\Notifications\ReminderSharedNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 /**
@@ -245,5 +247,89 @@ class SharedReminderTest extends TestCase
         $this->assertTrue($shared->refresh()->is_shared);
         $this->assertSame([], Reminder::query()->visibleTo($this->bob->refresh())->pluck('id')->all());
         $this->assertSame([$shared->id], Reminder::query()->visibleTo($this->alice)->pluck('id')->all());
+    }
+
+    // ---- Share notice on create -----------------------------------------
+
+    public function test_creating_a_shared_reminder_notifies_the_rest_of_the_household_but_not_the_owner()
+    {
+        Notification::fake();
+
+        $this->actingAs($this->alice)->post(route('reminders.store'), [
+            'title' => 'Bins out',
+            'due_date' => '2026-08-10',
+            'due_time' => '09:00',
+            'is_shared' => '1',
+        ]);
+
+        $reminder = Reminder::query()->sole();
+
+        Notification::assertSentTo(
+            $this->bob,
+            ReminderSharedNotification::class,
+            fn (ReminderSharedNotification $notification): bool => $notification->reminder->is($reminder),
+        );
+        Notification::assertNotSentTo($this->alice, ReminderSharedNotification::class);
+        Notification::assertNotSentTo($this->carol, ReminderSharedNotification::class);
+    }
+
+    public function test_a_private_reminder_notifies_nobody_on_create()
+    {
+        Notification::fake();
+
+        $this->actingAs($this->alice)->post(route('reminders.store'), [
+            'title' => 'Just me',
+            'due_date' => '2026-08-10',
+            'due_time' => '09:00',
+        ]);
+
+        Notification::assertNothingSent();
+    }
+
+    public function test_sharing_an_existing_reminder_on_edit_sends_no_notice()
+    {
+        Notification::fake();
+
+        $reminder = Reminder::factory()->for($this->alice)->create(['title' => 'Bins out']);
+
+        $this->actingAs($this->alice)->put(route('reminders.update', $reminder), [
+            'title' => 'Bins out',
+            'due_date' => '2026-08-10',
+            'due_time' => '09:00',
+            'is_shared' => '1',
+        ]);
+
+        $this->assertTrue($reminder->refresh()->is_shared);
+        Notification::assertNothingSent();
+    }
+
+    public function test_a_shared_reminder_from_the_shortcut_notifies_the_household_too()
+    {
+        Notification::fake();
+
+        $this->alice->regeneratePhoneToken();
+
+        $this->withHeader('X-Shortcut-Token', (string) $this->alice->phone_token)
+            ->postJson(route('shortcut.reminders.store'), ['title' => 'Bins out', 'is_shared' => true])
+            ->assertCreated();
+
+        Notification::assertSentTo($this->bob, ReminderSharedNotification::class);
+        Notification::assertNotSentTo($this->alice, ReminderSharedNotification::class);
+    }
+
+    public function test_the_share_push_names_the_owner_and_the_due_time_on_the_recipients_clock()
+    {
+        $reminder = Reminder::factory()->for($this->alice)->shared()->create([
+            'title' => 'Bins out',
+            'due_at' => Carbon::parse('2026-08-10 14:00', 'UTC'),
+        ]);
+
+        $message = (new ReminderSharedNotification($reminder))
+            ->toWebPush($this->bob, new ReminderSharedNotification($reminder))
+            ->toArray();
+
+        $this->assertSame('Alice Green shared a reminder', $message['title']);
+        $this->assertStringStartsWith('Bins out — ', $message['body']);
+        $this->assertSame(route('reminders.index'), $message['data']['url']);
     }
 }

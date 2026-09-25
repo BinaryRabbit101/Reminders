@@ -107,6 +107,8 @@ class ReminderController extends Controller
 
         $this->syncAlerts($reminder, $request->alertOffsets());
 
+        $reminder->announceShare();
+
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Reminder created.')]);
 
         return $this->backToList();

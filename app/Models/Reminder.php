@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Jobs\RunCompletionHook;
+use App\Notifications\ReminderSharedNotification;
 use App\Support\RecurrenceCalculator;
 use App\Support\RecurrenceRule;
 use Carbon\CarbonImmutable;
@@ -17,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * @property int $id
@@ -239,6 +241,25 @@ class Reminder extends Model
         }
 
         return $this->user->householdMembers();
+    }
+
+    /**
+     * Tell the rest of the household a shared reminder was just created —
+     * everyone in {@see recipients()} except the owner, who made it and needs
+     * no buzz about it. Called from the create paths only (the form and the
+     * Shortcut); sharing an existing reminder on edit stays quiet.
+     */
+    public function announceShare(): void
+    {
+        if (! $this->is_shared) {
+            return;
+        }
+
+        $others = $this->recipients()->reject(fn (User $member): bool => $member->id === $this->user_id);
+
+        if ($others->isNotEmpty()) {
+            Notification::send($others, new ReminderSharedNotification($this));
+        }
     }
 
     /**
