@@ -80,8 +80,14 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 // Bring the app to `url`: reuse a window already open on this app (navigating
-// it there) when there is one, otherwise open a new one.
+// it there) when there is one, otherwise open a new one. An off-site link (an
+// Automations push pointing at Walmart, say) always gets its own window, since
+// navigating the app's window there would strand the PWA.
 function focusOrOpen(url) {
+    if (new URL(url, self.registration.scope).origin !== self.location.origin) {
+        return self.clients.openWindow(url);
+    }
+
     return self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
         for (const client of windows) {
             if (client.url.startsWith(self.registration.scope) && 'focus' in client) {
