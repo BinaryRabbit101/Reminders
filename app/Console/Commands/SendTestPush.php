@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\User;
 use App\Notifications\TestPushNotification;
 use Illuminate\Console\Command;
+use Illuminate\Support\Str;
 
 class SendTestPush extends Command
 {
@@ -23,7 +24,7 @@ class SendTestPush extends Command
         $arg = $this->argument('user');
 
         $user = $arg
-            ? User::query()->where('id', $arg)->orWhere('email', $arg)->first()
+            ? User::query()->where('id', $arg)->orWhere('email', Str::lower(trim($arg)))->first()
             : User::query()->whereHas('pushSubscriptions')->first();
 
         if (! $user) {

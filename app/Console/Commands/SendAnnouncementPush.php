@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\User;
 use App\Notifications\AnnouncementPushNotification;
 use Illuminate\Console\Command;
+use Illuminate\Support\Str;
 
 class SendAnnouncementPush extends Command
 {
@@ -44,7 +45,7 @@ class SendAnnouncementPush extends Command
         $sent = 0;
 
         foreach ((array) $this->argument('users') as $arg) {
-            $user = User::query()->where('id', $arg)->orWhere('email', $arg)->first();
+            $user = User::query()->where('id', $arg)->orWhere('email', Str::lower(trim($arg)))->first();
 
             if (! $user) {
                 $this->warn("No user matches {$arg}.");
