@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Household;
+use App\Models\Reminder;
 use App\Models\ReminderCompletion;
 use App\Models\User;
 use App\Support\ReminderEventsFeed;
@@ -58,7 +59,7 @@ class ReminderEventsFeedTest extends TestCase
         }
     }
 
-    /** A completion row, written directly the way {@see \App\Models\Reminder::complete()} does. */
+    /** A completion row, written directly the way {@see Reminder::complete()} does. */
     private function completion(
         User $user,
         string $completedAt,

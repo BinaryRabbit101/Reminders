@@ -78,13 +78,13 @@ final class ReminderEventsFeed
             'generated_at' => $now->toIso8601String(),
             'since' => $sinceAt->toIso8601String(),
             'has_more' => $hasMore,
-            'events' => $rows->map(fn (ReminderCompletion $completion): array => [
+            'events' => array_values($rows->map(fn (ReminderCompletion $completion): array => [
                 'id' => $completion->id,
                 'title' => $completion->title,
                 'occurred_at' => CarbonImmutable::instance($completion->occurred_at)->utc()->toIso8601String(),
                 'completed_at' => CarbonImmutable::instance($completion->completed_at)->utc()->toIso8601String(),
                 'actor' => $this->actorName($completion->user),
-            ])->values()->all(),
+            ])->all()),
         ];
     }
 
