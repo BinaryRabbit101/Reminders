@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RequireApiToken;
 use App\Http\Middleware\ResolveShortcutToken;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -48,6 +49,18 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->prefix('api/shortcut')
                 ->name('shortcut.')
                 ->group(base_path('routes/shortcut.php'));
+
+            // The estate push service (HUB SHAPE.md move 3): other sites
+            // and box scripts push to the household's phones over HTTP.
+            // Same stored key, but read the estate-standard way
+            // (RequireApiToken: X-Api-Token / Bearer, 401 + message). The
+            // throttle sits in front of the token check so guessing is
+            // limited too; thirty a minute is far past what a weather
+            // warning or a watcher ever sends.
+            Route::middleware(['throttle:30,1', RequireApiToken::class])
+                ->prefix('api')
+                ->name('api.')
+                ->group(base_path('routes/push-api.php'));
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
