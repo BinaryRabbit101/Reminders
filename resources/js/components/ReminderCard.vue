@@ -13,10 +13,10 @@ import { Button } from '@/components/ui/button';
 import type { Reminder } from '@/types';
 
 /**
- * One row of the Today board. Overdue, later-today, and upcoming reminders
- * all share this layout — date stacked above time on the left, title and
- * details on the right — so a card reads the same no matter which bucket
- * it's in; only the overdue accent colour and the relative-time line differ.
+ * One reminder as a card — date stacked above time on the left, title and
+ * details on the right. The calendar's day panel draws one per stored
+ * occurrence; only the overdue accent colour and the relative-time line
+ * differ between an overdue card and any other.
  */
 const {
     reminder,
@@ -32,7 +32,7 @@ const {
 
 defineEmits<{
     edit: [reminder: Reminder];
-    /** Asks the board to open the confirm dialog for this row. */
+    /** Asks the page to open the confirm dialog for this row. */
     delete: [reminder: Reminder];
 }>();
 </script>

@@ -119,7 +119,7 @@ class CompletionNoteTest extends DuskTestCase
                 ->assertSeeIn('[data-test="completion-note-reminder-notes"]', 'Which one, and why?')
                 ->type('[data-test="completion-note-input"]', 'Lisbon.')
                 ->click('[data-test="completion-note-save"]')
-                ->waitForLocation('/today');
+                ->waitForLocation('/reminders');
         });
 
         $this->assertNotNull($reminder->fresh()->completed_at);

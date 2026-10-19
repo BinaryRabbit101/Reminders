@@ -130,7 +130,7 @@ class ReminderPreAlertNotification extends Notification
     private function data(): array
     {
         $data = [
-            'url' => route('today'),
+            'url' => route('reminders.index'),
             'reminder_id' => $this->reminderId(),
             'alert_id' => $this->alert->id,
             'complete_url' => URL::temporarySignedRoute(

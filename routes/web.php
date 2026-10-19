@@ -6,15 +6,17 @@ use App\Http\Controllers\ReminderActionController;
 use App\Http\Controllers\ReminderAlertController;
 use App\Http\Controllers\ReminderController;
 use App\Http\Controllers\ReminderListController;
-use App\Http\Controllers\TodayController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'Welcome')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::redirect('dashboard', '/today')->name('dashboard');
+    Route::redirect('dashboard', '/reminders')->name('dashboard');
 
-    Route::get('today', [TodayController::class, 'index'])->name('today');
+    // There used to be a separate Today page; the reminders index replaced
+    // it. Home-screen icons installed with start_url /today and pushes sent
+    // before the change still link here, so it lands on the index instead.
+    Route::redirect('today', '/reminders');
 
     // What was already sent. Visiting marks it read (notification-history).
     Route::get('history', [HistoryController::class, 'index'])->name('history');

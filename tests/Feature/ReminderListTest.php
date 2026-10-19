@@ -10,7 +10,6 @@ use App\Models\User;
 use App\Notifications\ReminderDueNotification;
 use App\Support\ListColor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
@@ -534,24 +533,6 @@ class ReminderListTest extends TestCase
                 ->where('reminders.0.list.name', 'Errands')
                 ->where('reminders.0.list.color_hex', ListColor::Amber->hex())
                 ->where('reminders.0.list_id', $list->id)
-            );
-    }
-
-    public function test_the_today_view_carries_the_users_lists_and_badges()
-    {
-        $user = User::factory()->create();
-        $list = ReminderList::factory()->for($user)->create(['name' => 'Meds']);
-        Reminder::factory()->for($user)->create([
-            'list_id' => $list->id,
-            'due_at' => Carbon::now()->addHours(2),
-        ]);
-
-        $this->actingAs($user)
-            ->get(route('today'))
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->has('lists', 1)
-                ->where('board.today.0.list.name', 'Meds')
             );
     }
 

@@ -68,9 +68,9 @@ class ReminderActionController extends Controller
         // Back to the page the tick came from — except the note page, which
         // is a single-purpose stop on the way somewhere else: going "back"
         // to it would show a form for the very reminder just completed. It
-        // lands on Today instead, toast and Undo intact.
+        // lands on the reminders index instead, toast and Undo intact.
         if ($this->cameFromNotePage($reminder)) {
-            return to_route('today');
+            return to_route('reminders.index');
         }
 
         return $this->back();
@@ -213,10 +213,10 @@ class ReminderActionController extends Controller
 
     /**
      * Send the user back where they were working — these actions fire from
-     * both the Today view and the reminders index.
+     * the reminders index, its list and calendar views alike.
      */
     private function back(): RedirectResponse
     {
-        return back(fallback: route('today'));
+        return back(fallback: route('reminders.index'));
     }
 }

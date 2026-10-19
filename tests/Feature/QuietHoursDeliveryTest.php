@@ -67,7 +67,7 @@ class QuietHoursDeliveryTest extends TestCase
         $this->artisan('reminders:send-due')->assertSuccessful();
 
         // The in-app half went out at the due moment: history and the unread
-        // badge are correct at 23:00, which is what the Today view promises.
+        // badge are correct at 23:00, which is what the app promises.
         $this->assertDatabaseCount('notifications', 1);
 
         // The push half is parked until morning.
@@ -506,9 +506,10 @@ class QuietHoursDeliveryTest extends TestCase
 
         $this->artisan('reminders:send-due')->assertSuccessful();
 
-        // In the app at 23:00 — Overdue on the Today board, in the history.
-        $board = $this->actingAs($user)->get(route('today'));
-        $board->assertOk();
+        // In the app at 23:00 — on the reminders page, in the history.
+        $this->actingAs($user)->get(route('reminders.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->has('reminders', 1));
         Notification::assertSentTo(
             $user,
             fn (ReminderDueNotification $n): bool => $n->via($user) === ReminderDueNotification::CHANNELS_IN_APP,

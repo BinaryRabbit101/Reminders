@@ -2,7 +2,7 @@
     "name": "Reminders",
     "short_name": "Reminders",
     "description": "Reminders that reach your phone on time, in your timezone.",
-    "start_url": "/today",
+    "start_url": "/reminders",
     "display": "standalone",
     "background_color": "#0a0a0a",
     "theme_color": "#0a0a0a",

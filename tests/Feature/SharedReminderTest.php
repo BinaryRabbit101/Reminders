@@ -108,20 +108,6 @@ class SharedReminderTest extends TestCase
             );
     }
 
-    public function test_the_today_board_buckets_a_household_members_shared_reminder()
-    {
-        $shared = Reminder::factory()->for($this->alice)->shared()->overdue()->create();
-        Reminder::factory()->for($this->alice)->overdue()->create(['title' => 'Private']);
-
-        $this->actingAs($this->bob)->get(route('today'))
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->has('board.overdue', 1)
-                ->where('board.overdue.0.id', $shared->id)
-                ->where('board.overdue.0.owner_label', 'by Alice')
-            );
-    }
-
     public function test_a_household_member_can_edit_and_delete_a_shared_reminder()
     {
         $shared = Reminder::factory()->for($this->alice)->shared()->create(['title' => 'Old']);
@@ -227,7 +213,7 @@ class SharedReminderTest extends TestCase
 
     public function test_the_form_defaults_advertise_whether_sharing_is_possible()
     {
-        $this->actingAs($this->alice)->get(route('today'))
+        $this->actingAs($this->alice)->get(route('reminders.index'))
             ->assertInertia(fn ($page) => $page
                 ->where('defaults.can_share', true)
                 ->where('defaults.is_shared', false)

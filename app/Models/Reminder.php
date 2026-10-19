@@ -280,7 +280,7 @@ class Reminder extends Model
      * When this reminder actually wants attention: a snooze moves the moment
      * forward, so a snoozed reminder is neither due nor overdue until then.
      *
-     * The same coalesce the Today view buckets on (TodayBoard) and the same
+     * The same coalesce the widget feed and the calendar sort on, and the same
      * value the dispatch log keys its occurrence by — one definition of "the
      * moment", used by every surface.
      */
@@ -551,7 +551,7 @@ class Reminder extends Model
      * reminders of everyone they share a household with.
      *
      * This is THE visibility rule. Every list surface — the reminders index,
-     * the Today board, the policy's row-level twin, and any feed that ships
+     * the widget feed, the policy's row-level twin, and any feed that ships
      * later — goes through here rather than filtering on `user_id` itself,
      * so "who can see what" can only ever be changed in one place.
      *

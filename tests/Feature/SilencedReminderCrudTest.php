@@ -168,9 +168,9 @@ class SilencedReminderCrudTest extends TestCase
         // No desired state is posted — the server flips the column, so a row
         // rendered before someone else changed it cannot set it wrong.
         $this->actingAs($user)
-            ->from(route('today'))
+            ->from(route('reminders.index'))
             ->post(route('reminders.silence', $reminder))
-            ->assertRedirect(route('today'));
+            ->assertRedirect(route('reminders.index'));
 
         $this->assertTrue($reminder->refresh()->is_silenced);
 

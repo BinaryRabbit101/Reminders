@@ -163,7 +163,7 @@ class CompletionNoteTest extends TestCase
         $this->assertSame(0, ReminderCompletion::query()->count());
     }
 
-    public function test_completing_from_the_note_page_lands_on_today()
+    public function test_completing_from_the_note_page_lands_on_the_reminders_index()
     {
         $user = User::factory()->create();
         $reminder = Reminder::factory()->for($user)->asksForNote()->create();
@@ -171,7 +171,7 @@ class CompletionNoteTest extends TestCase
         $this->actingAs($user)
             ->from(route('reminders.note', ['reminder' => $reminder, 'due' => 123]))
             ->post(route('reminders.complete', $reminder), ['note' => 'Good.'])
-            ->assertRedirect(route('today'));
+            ->assertRedirect(route('reminders.index'));
 
         // Anywhere else still goes back where it came from.
         $other = Reminder::factory()->for($user)->create();
@@ -390,7 +390,7 @@ class CompletionNoteTest extends TestCase
         foreach ([$due->toWebPush($user, $due)->toArray(), $pre->toWebPush($user, $pre)->toArray()] as $push) {
             $this->assertArrayNotHasKey('complete_open', $push['data']);
             $this->assertStringContainsString('signature=', $push['data']['complete_url']);
-            $this->assertSame(route('today'), $push['data']['url']);
+            $this->assertSame(route('reminders.index'), $push['data']['url']);
         }
     }
 

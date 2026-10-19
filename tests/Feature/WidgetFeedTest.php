@@ -370,7 +370,7 @@ class WidgetFeedTest extends TestCase
 
         $this->getJson($this->feedUrl($user))
             ->assertOk()
-            ->assertJsonPath('open_url', 'https://minipc.jackal-hippocampus.ts.net:451/today');
+            ->assertJsonPath('open_url', 'https://minipc.jackal-hippocampus.ts.net:451/reminders');
     }
 
     // ---- Timezone ------------------------------------------------------

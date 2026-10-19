@@ -93,6 +93,6 @@ class SendTestPushCommandTest extends TestCase
         $message = $notification->toWebPush($user, $notification)->toArray();
 
         $this->assertSame('Reminders', $message['title']);
-        $this->assertSame(route('today'), $message['data']['url']);
+        $this->assertSame(route('reminders.index'), $message['data']['url']);
     }
 }

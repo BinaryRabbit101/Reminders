@@ -154,7 +154,7 @@ class NotificationHistoryTest extends TestCase
         $this->record($user, $reminder);
         $this->record($user, $reminder, '2026-08-04 15:00:00');
 
-        $this->actingAs($user)->get(route('today'))
+        $this->actingAs($user)->get(route('reminders.index'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page->where('unreadNotificationCount', 2));
     }

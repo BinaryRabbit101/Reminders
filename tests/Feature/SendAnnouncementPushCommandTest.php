@@ -107,7 +107,7 @@ class SendAnnouncementPushCommandTest extends TestCase
 
         $message = $notification->toWebPush($user, $notification)->toArray();
 
-        $this->assertSame(route('today'), $message['data']['url']);
+        $this->assertSame(route('reminders.index'), $message['data']['url']);
         $this->assertArrayNotHasKey('tag', $message);
     }
 }

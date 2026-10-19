@@ -10,7 +10,7 @@ status line, the ship date, and a close-out section covering deviations from the
 |---|---|---|---|
 | [reminders-crud.md](reminders-crud.md) | Reminder model + CRUD UI | ✅ 2026-08-03 | Local→UTC lives solely in `ReminderRequest`; client never does zone math. Wayfinder needs `--with-form`. |
 | [pwa-shell.md](pwa-shell.md) | Manifest, network-only SW, icons, installability | ✅ 2026-08-03 | SW registration in `lib/serviceWorker.ts` — push.ts must not re-register. |
-| [today-view.md](today-view.md) | `/today` landing: Overdue / Today / Upcoming | ✅ 2026-08-03 | Bucketing in `TodayBoard`, formatting in `ReminderPresenter`; DST regression-tested. |
+| [today-view.md](today-view.md) | `/today` landing: Overdue / Today / Upcoming | ✅ 2026-08-03, retired 2026-10-19 | Retired: the reminders index is the one landing page and `/today` redirects there. DST cases moved to `ReminderCalendarTest`; card lives on as `ReminderCard.vue`. |
 | [push-notifications.md](push-notifications.md) | VAPID, subscribe flow, `push:test` | ✅ 2026-08-03 | ⚠ composer install/require broken on this box (Pest 5 vs PHP 8.4.0) — see close-out. Browser delivery check still manual. |
 | [delivery-engine.md](delivery-engine.md) | `reminders:send-due` + `ReminderDueNotification` | ✅ 2026-08-03 | Dispatch keys on the *effective* occurrence; claim-then-send is the send-once guarantee. |
 | [shared-reminders.md](shared-reminders.md) | Household: private vs shared, push fan-out to both accounts | ✅ 2026-08-03 | Visibility = `visibleTo`/`isVisibleTo`; policy delegates, so new abilities inherit the rule. |

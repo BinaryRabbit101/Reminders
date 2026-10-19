@@ -76,8 +76,8 @@ class SendDueReminders extends Command
      * Anything older is recorded as dispatched but never sent. Without this,
      * coming back from an hour of downtime — or creating a reminder with a
      * due date already in the past — would fire a wall of pushes for moments
-     * the user can no longer act on. Those still surface in Overdue on the
-     * Today view, which is the right place for them.
+     * the user can no longer act on. Those still surface as overdue on the
+     * reminders page, which is the right place for them.
      *
      * Note what this does *not* apply to: a held push. Holding is a decision
      * this command made on purpose, and a push held overnight is meant to be

@@ -197,7 +197,7 @@ class ReminderController extends Controller
 
     /**
      * Send the user back where they were working — the form sheet is opened
-     * from both the reminders index and the Today view — falling back to the
+     * from the reminders index and from history — falling back to the
      * index when there is nowhere to go back to.
      */
     private function backToList(): RedirectResponse

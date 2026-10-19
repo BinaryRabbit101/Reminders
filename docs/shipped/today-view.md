@@ -1,6 +1,16 @@
 # Today View
 
-**Status:** ✅ **Implemented — 2026-08-03**
+**Status:** ✅ **Implemented — 2026-08-03** · **Retired — 2026-10-19**
+
+> **Retired 2026-10-19.** The owner found two landing pages (Today and All Reminders)
+> confusing, and reminders beyond Today's one-week window looked missing. The reminders
+> index is now the one landing page: `/today` redirects to `/reminders` (old home-screen
+> icons and pushes link there), the nav has a single *Reminders* item, and
+> `EnablePushCard` moved onto the index. `TodayController`, `TodayBoard`, `Today.vue` and
+> their tests are gone; the card component survives as `ReminderCard.vue` (the calendar's
+> day panel), and the DST regression cases moved to `ReminderCalendarTest`. The widget
+> feed's JSON (`today` key etc.) is unchanged; its `open_url` now ends in `/reminders`.
+> The rest of this doc is the historical record.
 
 ## Close-out
 

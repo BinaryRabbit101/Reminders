@@ -47,7 +47,7 @@ class AnnouncementPushNotification extends Notification
             ->body($this->body)
             ->icon('/icons/icon-192.png')
             ->badge('/icons/badge-72.png')
-            ->data(['url' => $this->url ?? route('today')]);
+            ->data(['url' => $this->url ?? route('reminders.index')]);
 
         if ($this->tag !== null && $this->tag !== '') {
             $message->tag($this->tag);

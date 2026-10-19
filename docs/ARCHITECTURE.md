@@ -73,8 +73,10 @@ not locking. Relevant here for the "send once" guarantee in the delivery engine.
 Fortify defaults stay as scaffolded (multi-user, registration open — it's a personal app,
 but keeping the stock shape matches every sibling). Route convention:
 `Route::inertia('/', 'Welcome')->name('home')`, one `auth`+`verified` group, and
-`Route::redirect('dashboard', '/today')->name('dashboard')` aliasing the starter-kit
-dashboard to this app's real landing page, the Today view.
+`Route::redirect('dashboard', '/reminders')->name('dashboard')` aliasing the starter-kit
+dashboard to this app's real landing page, the reminders index. (Until 2026-10-19 the
+landing page was a separate Today view; `/today` now redirects to `/reminders` so old
+home-screen icons and push links keep working.)
 
 ### 7. Wayfinder build trap
 
@@ -97,6 +99,6 @@ notifications            (Laravel database channel — in-app history)
 Visibility rule (shared-reminders spec): private reminders are owner-only; shared
 reminders are visible to — and pushed to — every member of the owner's household. The
 rule lives in one query scope (`Reminder::visibleTo($user)`) that every surface (index,
-Today, widget feed, delivery recipients) must go through.
+calendar, widget feed, delivery recipients) must go through.
 
 Exact columns are defined per-spec; specs own their migrations.

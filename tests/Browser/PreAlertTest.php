@@ -72,7 +72,7 @@ class PreAlertTest extends DuskTestCase
         $this->assertDatabaseMissing('reminder_alerts', ['reminder_id' => $reminder->id]);
     }
 
-    public function test_today_board_marks_a_reminder_that_has_pre_alerts()
+    public function test_the_reminders_page_marks_a_reminder_that_has_pre_alerts()
     {
         $user = User::factory()->create();
         $reminder = Reminder::factory()->for($user)->create([
@@ -88,7 +88,7 @@ class PreAlertTest extends DuskTestCase
 
         $this->browse(function (Browser $browser) use ($user) {
             $browser->loginAs($user)
-                ->visit('/today')
+                ->visit('/reminders')
                 ->assertSee('Board the train')
                 ->assertSee('No alerts on this one')
                 // One bell for one alerting reminder — the plain one has none.

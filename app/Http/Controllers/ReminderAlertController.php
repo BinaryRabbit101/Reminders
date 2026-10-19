@@ -54,6 +54,6 @@ class ReminderAlertController extends Controller
             ]),
         ]);
 
-        return back(fallback: route('today'));
+        return back(fallback: route('reminders.index'));
     }
 }

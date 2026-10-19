@@ -55,9 +55,9 @@ class ReminderActionTest extends TestCase
         $reminder = Reminder::factory()->for($user)->create();
 
         $this->actingAs($user)
-            ->from(route('today'))
+            ->from(route('reminders.index'))
             ->post(route('reminders.complete', $reminder))
-            ->assertRedirect(route('today'));
+            ->assertRedirect(route('reminders.index'));
 
         $this->assertSame(
             Carbon::now()->format('Y-m-d H:i:s'),
@@ -177,9 +177,9 @@ class ReminderActionTest extends TestCase
         $reminder = Reminder::factory()->for($user)->overdue()->create();
 
         $this->actingAs($user)
-            ->from(route('today'))
+            ->from(route('reminders.index'))
             ->post(route('reminders.snooze', $reminder), ['preset' => $preset])
-            ->assertRedirect(route('today'));
+            ->assertRedirect(route('reminders.index'));
 
         $this->assertSame(
             $expected,
@@ -248,12 +248,12 @@ class ReminderActionTest extends TestCase
         $reminder = Reminder::factory()->for($user)->create();
 
         $this->actingAs($user)
-            ->from(route('today'))
+            ->from(route('reminders.index'))
             ->post(route('reminders.snooze', $reminder), ['preset' => 'forever'])
             ->assertSessionHasErrors('preset');
 
         $this->actingAs($user)
-            ->from(route('today'))
+            ->from(route('reminders.index'))
             ->post(route('reminders.snooze', $reminder), [])
             ->assertSessionHasErrors(['preset', 'until_date']);
 
@@ -268,7 +268,7 @@ class ReminderActionTest extends TestCase
         // A past snooze would be instantly due again — and is the only way
         // to collide with a dispatch row the engine has already claimed.
         $this->actingAs($user)
-            ->from(route('today'))
+            ->from(route('reminders.index'))
             ->post(route('reminders.snooze', $reminder), [
                 'until_date' => '2026-07-01',
                 'until_time' => '09:00',
@@ -341,24 +341,27 @@ class ReminderActionTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_a_snoozed_reminder_leaves_overdue_and_says_when_it_returns()
+    public function test_a_snoozed_reminder_says_when_it_returns()
     {
         $user = User::factory()->create();
         $reminder = Reminder::factory()->for($user)->create([
             'due_at' => Carbon::now()->subHours(3),
         ]);
 
-        $this->actingAs($user)->get(route('today'))
-            ->assertInertia(fn ($page) => $page->has('board.overdue', 1));
+        $this->actingAs($user)->get(route('reminders.index'))
+            ->assertInertia(fn ($page) => $page
+                ->has('reminders', 1)
+                ->where('reminders.0.is_snoozed', false)
+            );
 
         $this->actingAs($user)->post(route('reminders.snooze', $reminder), ['preset' => '3h']);
 
-        $this->actingAs($user)->get(route('today'))
+        // Snoozed rows are what the index stops drawing in overdue red.
+        $this->actingAs($user)->get(route('reminders.index'))
             ->assertInertia(fn ($page) => $page
-                ->has('board.overdue', 0)
-                ->has('board.today', 1)
-                ->where('board.today.0.is_snoozed', true)
-                ->where('board.today.0.snooze_label', 'Snoozed until Mon, Aug 3, 12:00 PM')
+                ->has('reminders', 1)
+                ->where('reminders.0.is_snoozed', true)
+                ->where('reminders.0.snooze_label', 'Snoozed until Mon, Aug 3, 12:00 PM')
             );
     }
 
@@ -371,11 +374,11 @@ class ReminderActionTest extends TestCase
         ]);
 
         // It is overdue again, not snoozed — the badge would be a lie.
-        $this->actingAs($user)->get(route('today'))
+        $this->actingAs($user)->get(route('reminders.index'))
             ->assertInertia(fn ($page) => $page
-                ->has('board.overdue', 1)
-                ->where('board.overdue.0.is_snoozed', false)
-                ->where('board.overdue.0.snooze_label', null)
+                ->has('reminders', 1)
+                ->where('reminders.0.is_snoozed', false)
+                ->where('reminders.0.snooze_label', null)
             );
     }
 

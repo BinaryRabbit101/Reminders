@@ -39,7 +39,7 @@ self.addEventListener('push', (event) => {
             // Buttons on the notification itself ("Complete", "Snooze 1h").
             // Their endpoints ride along in data as `{action}_url`.
             actions: payload.actions ?? [],
-            data: payload.data ?? { url: payload.url ?? '/today' },
+            data: payload.data ?? { url: payload.url ?? '/reminders' },
         }),
     );
 });
@@ -47,7 +47,7 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
     const data = event.notification.data ?? {};
-    const url = data.url ?? '/today';
+    const url = data.url ?? '/reminders';
 
     // An action button normally acts and stops there: the whole point of
     // "Complete" on the lock screen is not having to open the app. The URL was

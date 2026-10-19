@@ -17,8 +17,8 @@ use Illuminate\Support\Carbon;
  *
  * Only the *push* waits. The in-app notification for the same occurrence was
  * written the moment the reminder came due, so history, the unread badge and
- * the Today view are all correct immediately — this row exists purely to buzz
- * the phone later (settings-and-quiet-hours spec: "the Today view still shows
+ * the reminders page are all correct immediately — this row exists purely to
+ * buzz the phone later (settings-and-quiet-hours spec: the app "still shows
  * them immediately; only the push is held").
  *
  * Per recipient, unlike {@see ReminderDispatch}: two household members can

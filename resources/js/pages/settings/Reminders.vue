@@ -191,8 +191,9 @@ async function copy(field: string, value: string | null): Promise<void> {
                         </Label>
                         <p class="text-sm text-muted-foreground">
                             A reminder due inside the window shows up straight
-                            away on Today and in your history; only the push
-                            waits, and it arrives when the window ends.
+                            away on your reminders page and in your history;
+                            only the push waits, and it arrives when the window
+                            ends.
                         </p>
                     </div>
                 </div>

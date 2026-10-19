@@ -23,7 +23,7 @@ use Illuminate\Support\Carbon;
  *
  * Who the feed is allowed to show comes from `Reminder::visibleTo()` — the
  * one visibility rule every surface goes through — so a reminder shared by
- * the other household member appears here exactly as it does on the board.
+ * the other household member appears here exactly as it does in the app.
  */
 final class WidgetFeed
 {
@@ -44,7 +44,7 @@ final class WidgetFeed
 
     /**
      * A feed. Stateless — the local calendar it works on belongs to whoever
-     * it is built {@see for()}, exactly like {@see TodayBoard}.
+     * it is built {@see for()}.
      */
     public static function make(): self
     {
@@ -106,7 +106,7 @@ final class WidgetFeed
 
         foreach ($this->pendingThrough($user, $endOfToday, $sharedOnly) as $reminder) {
             // A snooze moves the moment, so a reminder snoozed to 3pm is a
-            // 3pm row — the same definition the board buckets on and the
+            // 3pm row — the same definition the calendar sorts on and the
             // delivery engine sends on.
             $at = $reminder->effectiveDueAt();
 
@@ -155,7 +155,7 @@ final class WidgetFeed
             // the URL has to be the one a browser should open, which is the
             // app's configured address (the same value signed notification
             // action URLs depend on — snooze-and-complete close-out).
-            'open_url' => rtrim((string) config('app.url'), '/').'/today',
+            'open_url' => rtrim((string) config('app.url'), '/').'/reminders',
         ];
     }
 

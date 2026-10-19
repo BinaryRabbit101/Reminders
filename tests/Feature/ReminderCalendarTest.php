@@ -7,7 +7,6 @@ use App\Models\ReminderList;
 use App\Models\User;
 use App\Support\ListColor;
 use App\Support\ReminderCalendar;
-use App\Support\TodayBoard;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -17,8 +16,7 @@ use Tests\TestCase;
  * The month grid behind `?view=calendar`.
  *
  * Two rules are being pinned down here, and both of them are easy to get
- * wrong. The first is the one {@see TodayBoard} exists to
- * enforce: which *cell* a reminder lands in is decided on the local calendar,
+ * wrong. The first is the local-day rule: which *cell* a reminder lands in is decided on the local calendar,
  * so the fixtures use wall-times whose UTC date deliberately disagrees with
  * their local one. The second is projection: a repeating reminder stores only
  * the occurrence it is currently on, and every later one the rule produces
@@ -83,6 +81,42 @@ class ReminderCalendarTest extends TestCase
         $this->assertSame(['Late on the last day'], $this->titlesOn($calendar, '2026-09-30'));
         $this->assertSame([], $this->titlesOn($calendar, '2026-10-01'));
         $this->assertSame('11:30 PM', $this->day($calendar, '2026-09-30')['entries'][0]['time_label']);
+    }
+
+    public function test_the_local_day_survives_the_spring_forward_transition()
+    {
+        $user = User::factory()->create();
+
+        // 2026-03-08 is the spring-forward date in America/Chicago: the local
+        // day is 23 hours long and changes offset halfway through. (Moved
+        // here from the retired Today board's tests.)
+        Reminder::factory()->for($user)->dueLocal('2026-03-08 01:30')->create(['title' => 'Before the jump']);
+        Reminder::factory()->for($user)->dueLocal('2026-03-08 23:30')->create(['title' => 'After the jump']);
+        Reminder::factory()->for($user)->dueLocal('2026-03-09 00:30')->create(['title' => 'Next morning']);
+
+        $calendar = $this->calendar($user, '2026-03', '2026-03-08 01:00');
+
+        // 01:30 is still CST (UTC-6), 23:30 is already CDT (UTC-5) — both
+        // belong to the same local day.
+        $this->assertSame(['Before the jump', 'After the jump'], $this->titlesOn($calendar, '2026-03-08'));
+        $this->assertSame(['Next morning'], $this->titlesOn($calendar, '2026-03-09'));
+        $this->assertTrue($this->day($calendar, '2026-03-08')['is_today']);
+    }
+
+    public function test_the_local_day_survives_the_fall_back_transition()
+    {
+        $user = User::factory()->create();
+
+        // 2026-11-01 is the fall-back date: a 25-hour local day.
+        Reminder::factory()->for($user)->dueLocal('2026-11-01 23:30')->create(['title' => 'Late in a long day']);
+        Reminder::factory()->for($user)->dueLocal('2026-11-02 08:00')->create(['title' => 'Next morning']);
+
+        $calendar = $this->calendar($user, '2026-11', '2026-11-01 00:30');
+
+        // 23:30 local is 05:30 UTC on 2026-11-02, yet it is still the 1st.
+        $this->assertSame(['Late in a long day'], $this->titlesOn($calendar, '2026-11-01'));
+        $this->assertSame(['Next morning'], $this->titlesOn($calendar, '2026-11-02'));
+        $this->assertSame('11:30 PM', $this->day($calendar, '2026-11-01')['entries'][0]['time_label']);
     }
 
     public function test_a_repeating_reminder_is_projected_onto_every_occurrence_in_the_grid()
@@ -242,7 +276,7 @@ class ReminderCalendarTest extends TestCase
                 ->where('calendar.month_label', 'September 2026')
                 ->has('calendar.weeks', 5)
                 // The rows travel in full as well: the day panel underneath
-                // the grid draws the same cards the Today board does.
+                // the grid draws full reminder cards.
                 ->has('reminders', 1)
                 ->etc()
             );

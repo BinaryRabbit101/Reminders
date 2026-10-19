@@ -3,7 +3,6 @@ import { Link, usePage } from '@inertiajs/vue3';
 import {
     BellRing,
     BookOpen,
-    CalendarCheck,
     Folder,
     History,
     Menu,
@@ -44,7 +43,7 @@ import UserMenuContent from '@/components/UserMenuContent.vue';
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import { getInitials } from '@/composables/useInitials';
 import { toUrl } from '@/lib/utils';
-import { history, today } from '@/routes';
+import { history } from '@/routes';
 import { index as lists } from '@/routes/lists';
 import { index as reminders } from '@/routes/reminders';
 import type { BreadcrumbItem, NavItem } from '@/types';
@@ -73,12 +72,7 @@ const unreadCount = computed(() => page.props.unreadNotificationCount ?? 0);
 
 const mainNavItems = computed<HeaderNavItem[]>(() => [
     {
-        title: 'Today',
-        href: today(),
-        icon: CalendarCheck,
-    },
-    {
-        title: 'All Reminders',
+        title: 'Reminders',
         href: reminders(),
         icon: BellRing,
     },
@@ -194,7 +188,7 @@ const rightNavItems: NavItem[] = [
                     </Sheet>
                 </div>
 
-                <Link :href="today()" class="flex items-center gap-x-2">
+                <Link :href="reminders()" class="flex items-center gap-x-2">
                     <AppLogo />
                 </Link>
 

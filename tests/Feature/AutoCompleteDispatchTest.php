@@ -93,7 +93,7 @@ class AutoCompleteDispatchTest extends TestCase
 
         $this->artisan('reminders:send-due')->assertSuccessful();
 
-        // `due()` is the same scope the Today board's Overdue bucket reads.
+        // `due()` is the scope that decides what counts as overdue.
         $this->assertFalse(Reminder::query()->due()->whereKey($reminder->id)->exists());
         $this->assertTrue(Reminder::query()->pending()->whereKey($reminder->id)->exists());
     }

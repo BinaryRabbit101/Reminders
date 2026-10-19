@@ -173,7 +173,7 @@ export type Reminder = {
     auto_complete: boolean;
     /**
      * Whether this reminder is delivered without a push notification — the
-     * in-app record and the Today board are unchanged, no phone buzzes, and
+     * in-app record and the reminders page are unchanged, no phone buzzes, and
      * its pre-alerts are silent with it. Draws the crossed-out bell glyph.
      */
     is_silenced: boolean;
@@ -188,26 +188,6 @@ export type Reminder = {
      * most rows — which is exactly what the bell glyph keys off.
      */
     alerts: ReminderAlert[];
-};
-
-/** One local day of upcoming reminders, with its heading already formatted. */
-export type UpcomingDay = {
-    key: string;
-    label: string;
-    reminders: Reminder[];
-};
-
-/**
- * The Today view's three buckets. The server decided which reminder belongs
- * in which — the boundaries are local days, and only the server knows the
- * display timezone.
- */
-export type TodayBoard = {
-    overdue: Reminder[];
-    today: Reminder[];
-    upcoming: UpcomingDay[];
-    today_label: string;
-    upcoming_days: number;
 };
 
 /** Local wall-time the create form opens with. */

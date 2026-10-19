@@ -36,7 +36,7 @@ class ReminderDueNotification extends Notification
      * How long the notification's action URLs stay valid, in days.
      *
      * They have to outlive the notification sitting unattended on a lock
-     * screen — a week matches the Today view's upcoming window and is short
+     * screen — a week is long enough for that and short
      * enough that a signed, session-less "complete this reminder" link is not
      * left lying around indefinitely.
      */
@@ -52,7 +52,7 @@ class ReminderDueNotification extends Notification
     /**
      * The in-app record only, no buzz. Sent at the reminder's real due moment
      * to a recipient whose quiet hours are in force, so their history, unread
-     * badge and Today view are all correct immediately while the push waits
+     * badge and reminders page are all correct immediately while the push waits
      * (settings-and-quiet-hours spec).
      *
      * @var list<string>
@@ -118,7 +118,7 @@ class ReminderDueNotification extends Notification
     public function toWebPush(object $notifiable, Notification $notification): WebPushMessage
     {
         $data = [
-            'url' => route('today'),
+            'url' => route('reminders.index'),
             'reminder_id' => $this->reminder->id,
             'complete_url' => $this->actionUrl('notification-actions.complete'),
             'snooze_url' => $this->actionUrl('notification-actions.snooze', [

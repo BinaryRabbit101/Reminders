@@ -5,7 +5,7 @@ import { ref } from 'vue';
 import CompletionNoteForm from '@/components/CompletionNoteForm.vue';
 import { Button } from '@/components/ui/button';
 import { useReminderActions } from '@/composables/useReminderActions';
-import { today } from '@/routes';
+import { index as reminders } from '@/routes/reminders';
 import type { Reminder } from '@/types';
 
 /**
@@ -15,12 +15,12 @@ import type { Reminder } from '@/types';
  *
  * The same form the in-app dialog shows (CompletionNoteForm), posting to the
  * same complete endpoint. The server notices the post came from this page and
- * lands it on Today instead of sending it back here, so the completion toast
+ * lands it on the reminders page instead of sending it back here, so the completion toast
  * — Undo included — shows up where the user is headed anyway.
  *
  * `is_done` is the server's answer to "is there still anything to complete?"
  * A push can be tapped hours after the reminder was ticked off some other
- * way; then this says so and offers the way to Today, rather than a form
+ * way; then this says so and offers the way back to Reminders, rather than a form
  * that would quietly complete the series' *next* occurrence.
  */
 const {
@@ -37,8 +37,8 @@ defineOptions({
     layout: {
         breadcrumbs: [
             {
-                title: 'Today',
-                href: today(),
+                title: 'Reminders',
+                href: reminders(),
             },
         ],
     },
@@ -54,7 +54,7 @@ function finish(note: string | null): void {
     error.value = undefined;
 
     complete(reminder, note, {
-        // Leaving this page for Today: start that one at the top.
+        // Leaving this page for the reminders page: start that one at the top.
         preserveScroll: false,
         onError: (errors) => {
             error.value = errors.note;
@@ -95,7 +95,7 @@ function finish(note: string | null): void {
                     complete here.
                 </p>
                 <Button variant="outline" as-child>
-                    <Link :href="today()">Go to Today</Link>
+                    <Link :href="reminders()">Back to Reminders</Link>
                 </Button>
             </div>
 

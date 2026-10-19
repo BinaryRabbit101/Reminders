@@ -35,7 +35,7 @@ use Illuminate\Support\Carbon;
  *    are told apart by a payload key rather than by the row's `type`.
  * 2. **Days are local days.** Grouping happens on the *reader's* calendar
  *    (their timezone, or the app default — ARCHITECTURE.md §1 plus
- *    `User::timezone()`), exactly like TodayBoard buckets — a 23:30
+ *    `User::timezone()`), exactly like ReminderCalendar's cells — a 23:30
  *    local send belongs to that local day even though its UTC date has already
  *    rolled over. Every string a page receives is formatted here, through
  *    ReminderPresenter; the client never does timezone math.

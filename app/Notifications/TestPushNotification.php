@@ -31,6 +31,6 @@ class TestPushNotification extends Notification
             ->icon('/icons/icon-192.png')
             ->badge('/icons/badge-72.png')
             ->tag('test-push')
-            ->data(['url' => route('today')]);
+            ->data(['url' => route('reminders.index')]);
     }
 }

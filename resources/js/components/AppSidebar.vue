@@ -1,13 +1,6 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
-import {
-    BellRing,
-    BookOpen,
-    CalendarCheck,
-    FolderGit2,
-    History,
-    Tags,
-} from '@lucide/vue';
+import { BellRing, BookOpen, FolderGit2, History, Tags } from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavFooter from '@/components/NavFooter.vue';
@@ -25,7 +18,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
-import { history, today } from '@/routes';
+import { history } from '@/routes';
 import { index as lists } from '@/routes/lists';
 import { index as reminders } from '@/routes/reminders';
 import type { NavItem } from '@/types';
@@ -39,12 +32,7 @@ const unreadCount = computed(() => page.props.unreadNotificationCount ?? 0);
 
 const mainNavItems: NavItem[] = [
     {
-        title: 'Today',
-        href: today(),
-        icon: CalendarCheck,
-    },
-    {
-        title: 'All Reminders',
+        title: 'Reminders',
         href: reminders(),
         icon: BellRing,
     },
@@ -86,7 +74,7 @@ const footerNavItems: NavItem[] = [
             <SidebarMenu>
                 <SidebarMenuItem>
                     <SidebarMenuButton size="lg" as-child>
-                        <Link :href="today()">
+                        <Link :href="reminders()">
                             <AppLogo />
                         </Link>
                     </SidebarMenuButton>

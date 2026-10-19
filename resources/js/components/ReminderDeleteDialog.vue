@@ -18,8 +18,8 @@ import type { Reminder } from '@/types';
  * "Delete this reminder?" — the confirm step, shared by every surface that
  * offers a trash can.
  *
- * Extracted from the reminders index when the Today board gained its own
- * delete button: deleting is irreversible and takes the reminder's pre-alerts
+ * Extracted from the reminders index when a second surface (now the
+ * calendar's day panel) gained its own delete button: deleting is irreversible and takes the reminder's pre-alerts
  * and dispatch log with it, so the wording of the warning is exactly the kind
  * of thing that must not drift between two copies of a dialog.
  *

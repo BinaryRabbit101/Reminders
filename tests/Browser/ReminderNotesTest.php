@@ -17,17 +17,17 @@ class ReminderNotesTest extends DuskTestCase
         .'is affordable — but it is still the single largest subscription on the list and '
         .'deserves a conscious yes every few months instead of silent auto-renewal.';
 
-    public function test_long_notes_clamp_and_expand_on_the_today_board()
+    public function test_long_notes_clamp_and_expand_on_the_calendar_day_panel()
     {
         $user = User::factory()->create();
         Reminder::factory()->for($user)->create([
             'title' => 'Decide on the subscription',
-            'due_at' => Carbon::now()->subHours(2),
+            'due_at' => $this->today()->setTime(14, 0)->utc(),
             'notes' => self::LONG_NOTES,
         ]);
 
         $this->browse(function (Browser $browser) use ($user) {
-            $browser->loginAs($user)->visit('/today');
+            $browser->loginAs($user)->visit('/reminders?view=calendar');
 
             $this->emulateMobileViewport($browser);
 
@@ -50,7 +50,7 @@ class ReminderNotesTest extends DuskTestCase
 
             // The full text is prose, not truncation — and it must not push
             // the card sideways on a phone.
-            $this->assertNoHorizontalOverflow($browser, 'Today board with expanded notes');
+            $this->assertNoHorizontalOverflow($browser, 'Calendar day panel with expanded notes');
 
             $browser->click('[data-test="reminder-notes-toggle"]')
                 ->waitForTextIn('[data-test="reminder-notes-toggle"]', 'Show more');
@@ -62,12 +62,12 @@ class ReminderNotesTest extends DuskTestCase
         $user = User::factory()->create();
         Reminder::factory()->for($user)->create([
             'title' => 'Decide on the subscription',
-            'due_at' => Carbon::now()->addHours(2),
+            'due_at' => $this->today()->setTime(14, 0)->utc(),
             'notes' => self::LONG_NOTES,
         ]);
 
         $this->browse(function (Browser $browser) use ($user) {
-            $browser->loginAs($user)->visit('/today')
+            $browser->loginAs($user)->visit('/reminders?view=calendar')
                 ->waitFor('[data-test="reminder-notes-toggle"]')
                 ->click('[data-test="reminder-notes-toggle"]')
                 ->waitForTextIn('[data-test="reminder-notes-toggle"]', 'Show less')
@@ -81,12 +81,12 @@ class ReminderNotesTest extends DuskTestCase
         $user = User::factory()->create();
         Reminder::factory()->for($user)->create([
             'title' => 'Decide on the subscription',
-            'due_at' => Carbon::now()->addHours(2),
+            'due_at' => $this->today()->setTime(14, 0)->utc(),
             'notes' => self::LONG_NOTES,
         ]);
 
         $this->browse(function (Browser $browser) use ($user) {
-            $browser->loginAs($user)->visit('/today');
+            $browser->loginAs($user)->visit('/reminders?view=calendar');
 
             $this->emulateMobileViewport($browser);
 
@@ -120,12 +120,12 @@ class ReminderNotesTest extends DuskTestCase
         $user = User::factory()->create();
         Reminder::factory()->for($user)->create([
             'title' => 'Water the plants',
-            'due_at' => Carbon::now()->addHours(2),
+            'due_at' => $this->today()->setTime(14, 0)->utc(),
             'notes' => 'Just the balcony ones.',
         ]);
 
         $this->browse(function (Browser $browser) use ($user) {
-            $browser->loginAs($user)->visit('/today')
+            $browser->loginAs($user)->visit('/reminders?view=calendar')
                 ->waitFor('[data-test="reminder-notes"]')
                 ->assertSeeIn('[data-test="reminder-notes"]', 'Just the balcony ones.')
                 ->assertMissing('[data-test="reminder-notes-toggle"]');
@@ -165,6 +165,12 @@ class ReminderNotesTest extends DuskTestCase
 
             $this->assertNoHorizontalOverflow($browser, 'Reminders index with expanded notes');
         });
+    }
+
+    /** Today on the display calendar — the day the calendar's panel opens on. */
+    private function today(): Carbon
+    {
+        return Carbon::now((string) config('reminders.timezone'))->startOfDay();
     }
 
     /** Whether the notes element is hiding part of its content behind the clamp. */

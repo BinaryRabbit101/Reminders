@@ -16,12 +16,12 @@ class DashboardTest extends TestCase
         $response->assertRedirect(route('login'));
     }
 
-    public function test_authenticated_users_are_sent_to_the_today_view()
+    public function test_authenticated_users_are_sent_to_the_reminders_page()
     {
         $user = User::factory()->create();
         $this->actingAs($user);
 
         $response = $this->get(route('dashboard'));
-        $response->assertRedirect('/today');
+        $response->assertRedirect('/reminders');
     }
 }

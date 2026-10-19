@@ -317,7 +317,7 @@ class SendDueRemindersTest extends TestCase
 
         $this->assertSame('Take the bins out', $push['title']);
         $this->assertSame('Green bin this week.', $push['body']);
-        $this->assertSame(route('today'), $push['data']['url']);
+        $this->assertSame(route('reminders.index'), $push['data']['url']);
 
         $this->assertSame([
             'reminder_id' => $reminder->id,

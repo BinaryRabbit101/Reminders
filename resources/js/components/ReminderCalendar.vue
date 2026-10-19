@@ -2,7 +2,7 @@
 import { Link } from '@inertiajs/vue3';
 import { ChevronLeft, ChevronRight, Plus, Repeat } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
-import TodayReminderCard from '@/components/TodayReminderCard.vue';
+import ReminderCard from '@/components/ReminderCard.vue';
 import { Button } from '@/components/ui/button';
 import type {
     CalendarDay,
@@ -15,8 +15,8 @@ import type {
  * The month view of the reminders page.
  *
  * The grid is a *summary* — a dot, a time and a title per entry — and the
- * panel underneath is where a day is actually worked on, with the same cards
- * the Today board uses. That split is what keeps a month usable at 375px: a
+ * panel underneath is where a day is actually worked on, with full reminder
+ * cards (ReminderCard). That split is what keeps a month usable at 375px: a
  * cell never has to hold a complete reminder row.
  *
  * Which day is open is client-side state on purpose. Changing months is a
@@ -326,10 +326,10 @@ function dayLabel(day: CalendarDay): string {
             <ul v-else class="flex flex-col gap-2">
                 <template v-for="entry in selectedDay.entries" :key="entry.key">
                     <!--
-                        A stored occurrence is a real row: the same card the
-                        Today board uses, with every action on it.
+                        A stored occurrence is a real row: a full card, with
+                        every action on it.
                     -->
-                    <TodayReminderCard
+                    <ReminderCard
                         v-if="!entry.is_projected && reminderFor(entry)"
                         :reminder="reminderFor(entry)!"
                         :overdue="entry.is_overdue"

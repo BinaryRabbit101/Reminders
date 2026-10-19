@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { usePush } from '@/composables/usePush';
 
 /**
- * A dismissible "turn on notifications" nudge for the Today view.
+ * A dismissible "turn on notifications" nudge for the reminders page.
  *
  * Self-contained: drop `<EnablePushCard />` above the reminder list and it
  * takes care of the rest. It renders nothing unless push is genuinely

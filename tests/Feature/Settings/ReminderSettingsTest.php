@@ -429,10 +429,10 @@ class ReminderSettingsTest extends TestCase
         );
     }
 
-    public function test_the_today_board_buckets_on_the_viewers_own_calendar()
+    public function test_the_reminders_index_dates_rows_on_the_viewers_own_calendar()
     {
         // 23:30 Chicago on the 3rd is 00:30 on the 4th in New York. The same
-        // reminder is therefore "later today" for one account and "tomorrow"
+        // reminder is therefore on the 3rd for one account and on the 4th
         // for the other — which is the whole point of the override.
         Carbon::setTestNow(Carbon::parse('2026-08-03 20:00', 'America/Chicago'));
 
@@ -446,11 +446,11 @@ class ReminderSettingsTest extends TestCase
         }
 
         $this->actingAs($central)
-            ->get(route('today'))
-            ->assertInertia(fn ($page) => $page->has('board.today', 1)->has('board.upcoming', 0));
+            ->get(route('reminders.index'))
+            ->assertInertia(fn ($page) => $page->where('reminders.0.due_date_label', 'Mon, Aug 3'));
 
         $this->actingAs($eastern)
-            ->get(route('today'))
-            ->assertInertia(fn ($page) => $page->has('board.today', 0)->has('board.upcoming', 1));
+            ->get(route('reminders.index'))
+            ->assertInertia(fn ($page) => $page->where('reminders.0.due_date_label', 'Tue, Aug 4'));
     }
 }

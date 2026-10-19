@@ -75,9 +75,9 @@ class PreAlertSnoozeTest extends TestCase
         [$reminder, $alert] = $this->alerted($user);
 
         $this->actingAs($user)
-            ->from(route('today'))
+            ->from(route('reminders.index'))
             ->post(route('reminders.alerts.snooze', [$reminder, $alert]), ['preset' => '10m'])
-            ->assertRedirect(route('today'));
+            ->assertRedirect(route('reminders.index'));
 
         $this->assertSame(
             '2026-08-03 14:10:00',
@@ -113,7 +113,7 @@ class PreAlertSnoozeTest extends TestCase
         [$reminder, $alert] = $this->alerted($user);
 
         $this->actingAs($user)
-            ->from(route('today'))
+            ->from(route('reminders.index'))
             ->post(route('reminders.alerts.snooze', [$reminder, $alert]), [
                 'until_date' => '2026-07-01',
                 'until_time' => '09:00',
@@ -129,7 +129,7 @@ class PreAlertSnoozeTest extends TestCase
         [$reminder, $alert] = $this->alerted($user);
 
         $this->actingAs($user)
-            ->from(route('today'))
+            ->from(route('reminders.index'))
             ->post(route('reminders.alerts.snooze', [$reminder, $alert]), ['preset' => 'forever'])
             ->assertSessionHasErrors('preset');
 

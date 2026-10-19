@@ -28,7 +28,7 @@ class HistoryController extends Controller
         return Inertia::render('history/Index', [
             'history' => NotificationHistory::make()->openFor($user),
             // The feed links each surviving entry to the same edit sheet the
-            // Today view opens in place, which needs all three of these.
+            // reminders page opens in place, which needs all three of these.
             'timezone' => $user->timezone(),
             'defaults' => $presenter->formDefaults($user),
             'lists' => $presenter->lists($user),

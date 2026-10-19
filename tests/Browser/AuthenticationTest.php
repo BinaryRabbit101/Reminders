@@ -19,7 +19,7 @@ class AuthenticationTest extends DuskTestCase
         });
     }
 
-    public function test_user_can_login_and_see_today_board()
+    public function test_user_can_login_and_land_on_the_reminders_page()
     {
         $user = User::factory()->create();
 
@@ -28,7 +28,7 @@ class AuthenticationTest extends DuskTestCase
                 ->type('#email', $user->email)
                 ->type('#password', 'password')
                 ->click('[data-test="login-button"]')
-                ->waitForLocation('/today')
+                ->waitForLocation('/reminders')
                 ->assertAuthenticated();
         });
     }
@@ -54,7 +54,7 @@ class AuthenticationTest extends DuskTestCase
 
         $this->browse(function (Browser $browser) use ($user) {
             $browser->loginAs($user)
-                ->visit('/today')
+                ->visit('/reminders')
                 ->assertAuthenticated()
                 ->waitFor('[data-test="sidebar-menu-button"]');
 

@@ -16,8 +16,8 @@ use Illuminate\Support\Collection;
  * Two things make this more than a `group by date`:
  *
  * - **Local days, again.** Rows are stored in UTC, so which *cell* a reminder
- *   lands in is decided on the viewer's calendar and nowhere else — the same
- *   rule {@see TodayBoard} exists to enforce. A reminder due 23:30 local
+ *   lands in is decided on the viewer's calendar and nowhere else — the rule
+ *   every local-day surface here shares. A reminder due 23:30 local
  *   belongs to that local day even though its UTC date has already rolled.
  * - **Projections.** A repeating reminder only stores the occurrence it is
  *   *currently* on, so a plain grid of `due_at` would leave a weekly chore
