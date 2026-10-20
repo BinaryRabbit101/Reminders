@@ -72,6 +72,34 @@ export function isPushSupported(): boolean {
 }
 
 /**
+ * An iPhone/iPad in Safari outside a home-screen app: no PushManager until the
+ * app is added to the Home Screen and opened from there. Never throws.
+ */
+export function needsHomeScreenInstall(): boolean {
+    try {
+        if (
+            typeof window === 'undefined' ||
+            (window as { PushManager?: unknown }).PushManager !== undefined
+        ) {
+            return false;
+        }
+
+        const isIos =
+            /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+        const standalone =
+            window.matchMedia('(display-mode: standalone)').matches ||
+            (navigator as Navigator & { standalone?: boolean }).standalone ===
+                true;
+
+        return isIos && !standalone;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * The registration made at boot. Resolves to null rather than hanging forever
  * when registration failed or never happened.
  */

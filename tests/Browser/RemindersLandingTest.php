@@ -11,7 +11,8 @@ use Tests\DuskTestCase;
 /**
  * The reminders page as the app's one landing page. There used to be a
  * separate Today page; it was folded in here, so the nav no longer offers it,
- * /today lands here, and the push nudge Today carried now sits on this page.
+ * and /today lands here. (The push nudge Today carried is now the
+ * notification grant banner on every page: NotificationGrantBannerTest.)
  *
  * The day-panel cards the Today board used to draw still live on, in the
  * calendar view, so their delete and phone-width checks moved there.
@@ -58,31 +59,6 @@ class RemindersLandingTest extends DuskTestCase
                 ->assertPathIs('/reminders')
                 ->waitForText('Reminders')
                 ->assertPresent('[data-test="new-reminder-button"]');
-        });
-    }
-
-    public function test_the_enable_push_card_shows_on_the_reminders_page()
-    {
-        $user = User::factory()->create();
-
-        $this->browse(function (Browser $browser) use ($user) {
-            $browser->loginAs($user)
-                ->visit('/reminders')
-                // Dismissal is per-device; clear any left over from another
-                // test so the card is offered fresh.
-                ->script('localStorage.removeItem("reminders:push-prompt-dismissed");');
-
-            $browser->refresh()
-                ->waitFor('[data-test="enable-push-prompt"]', 10)
-                ->assertSee('Get reminded on this device');
-
-            // Dismissing it sticks on this device.
-            $browser->click('[aria-label="Dismiss"]')
-                ->waitUntilMissing('[data-test="enable-push-prompt"]')
-                ->refresh()
-                ->waitFor('[data-test="new-reminder-button"]')
-                ->pause(500)
-                ->assertMissing('[data-test="enable-push-prompt"]');
         });
     }
 

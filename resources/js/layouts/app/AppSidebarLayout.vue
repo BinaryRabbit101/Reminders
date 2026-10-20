@@ -4,6 +4,7 @@ import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
 import CompletionNoteDialog from '@/components/CompletionNoteDialog.vue';
+import NotificationGrantBanner from '@/components/NotificationGrantBanner.vue';
 import { Toaster } from '@/components/ui/sonner';
 import type { BreadcrumbItem } from '@/types';
 
@@ -21,6 +22,8 @@ withDefaults(defineProps<Props>(), {
         <AppSidebar />
         <AppContent variant="sidebar" class="overflow-x-hidden">
             <AppSidebarHeader :breadcrumbs="breadcrumbs" />
+            <!-- Estate standard §6: the notification grant tops every page. -->
+            <NotificationGrantBanner />
             <slot />
         </AppContent>
         <Toaster />

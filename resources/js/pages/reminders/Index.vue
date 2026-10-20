@@ -13,7 +13,6 @@ import {
 import { computed, ref } from 'vue';
 import ReminderListController from '@/actions/App/Http/Controllers/ReminderListController';
 import AlertsBadge from '@/components/AlertsBadge.vue';
-import EnablePushCard from '@/components/EnablePushCard.vue';
 import ListBadge from '@/components/ListBadge.vue';
 import RecurrenceBadge from '@/components/RecurrenceBadge.vue';
 import ReminderCalendar from '@/components/ReminderCalendar.vue';
@@ -273,8 +272,6 @@ function isOverdue(reminder: Reminder): boolean {
                 </Button>
             </div>
         </div>
-
-        <EnablePushCard />
 
         <!--
             One list at a time, carried in the URL so a filtered view can be
